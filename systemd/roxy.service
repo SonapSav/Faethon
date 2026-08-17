@@ -1,0 +1,48 @@
+[Unit]
+Description=Roxy voice assistant
+Documentation=https://github.com/local/roxy
+# Needs a working network before the first OpenRouter call, and the sound
+# devices enumerated before opening the mic.
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=webmaster
+Group=webmaster
+# ALSA device access.
+SupplementaryGroups=audio
+
+WorkingDirectory=/home/webmaster/apps/roxy
+# `uv run` re-syncs the venv from uv.lock if it drifted, so a `git pull`
+# followed by a restart picks up dependency changes without extra steps.
+ExecStart=/home/webmaster/.local/bin/uv run --project /home/webmaster/apps/roxy roxy
+
+# The API key. pydantic-settings also reads this file directly, so this line is
+# belt-and-braces; the leading "-" keeps the unit from failing if it's absent.
+EnvironmentFile=-/home/webmaster/apps/roxy/.env
+
+Restart=always
+RestartSec=5
+# Don't give up after the default 5 attempts: a mic that's briefly unplugged
+# or a router still booting shouldn't take Roxy down permanently.
+StartLimitIntervalSec=0
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=roxy
+
+# Modest hardening. Roxy needs the network, the sound devices, and its own
+# directory -- not much else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# openWakeWord caches its models inside the venv, and uv writes there too.
+ReadWritePaths=/home/webmaster/apps/roxy
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,110 @@
+"""Configuration: config.yaml for settings, .env for secrets."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import yaml
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+ASSETS_DIR = PROJECT_ROOT / "assets"
+
+
+class AudioConfig(BaseModel):
+    input_device: str
+    output_device: str
+    sample_rate: int = 16000
+    frame_ms: int = 80
+
+    @property
+    def frame_samples(self) -> int:
+        return self.sample_rate * self.frame_ms // 1000
+
+    @property
+    def frame_bytes(self) -> int:
+        return self.frame_samples * 2  # s16le
+
+
+class WakeConfig(BaseModel):
+    model: str = "hey_jarvis_v0.1"
+    threshold: float = 0.5
+    refractory_sec: float = 2.0
+
+
+class UtteranceConfig(BaseModel):
+    vad_aggressiveness: int = Field(2, ge=0, le=3)
+    silence_ms: int = 600
+    min_ms: int = 400
+    max_ms: int = 15000
+    #: How long to wait for the user to start speaking at all. Separate from
+    #: silence_ms, which only applies once they have started.
+    start_timeout_ms: int = 5000
+    #: Sustained voice needed before "they started talking" is believed. Stops
+    #: a single noise blip from starting the end-of-speech clock.
+    speech_onset_ms: int = 120
+
+
+class ModelsConfig(BaseModel):
+    stt: str
+    llm: str
+    tts: str
+
+
+class STTConfig(BaseModel):
+    #: ISO-639-1 code. Empty means let Whisper auto-detect, which is what
+    #: produces the occasional English-transcribed-as-Greek surprise.
+    language: str = "en"
+    #: 0 makes decoding deterministic; higher values let it wander.
+    temperature: float = 0.0
+
+
+class LLMConfig(BaseModel):
+    max_tokens: int = 100
+    temperature: float = 0.7
+    history_turns: int = 10
+    system_prompt: str
+    #: Let the model think before answering. Off by default: reasoning tokens
+    #: come out of max_tokens, and on a spoken-reply budget they can consume
+    #: the lot and leave nothing to say. Only turn on with a large max_tokens.
+    reasoning: bool = False
+
+
+class TTSConfig(BaseModel):
+    #: Empty for providers that reject a voice field (e.g. Fish Audio).
+    voice: str = ""
+    #: Fallback only -- the real rate comes from the response Content-Type.
+    sample_rate: int = 24000
+
+
+class Settings(BaseSettings):
+    """Secrets from the environment / .env."""
+
+    model_config = SettingsConfigDict(
+        env_file=PROJECT_ROOT / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    openrouter_api_key: str = ""
+
+
+class Config(BaseModel):
+    audio: AudioConfig
+    wake: WakeConfig
+    utterance: UtteranceConfig
+    models: ModelsConfig
+    stt: STTConfig = STTConfig()
+    llm: LLMConfig
+    tts: TTSConfig
+    settings: Settings
+
+
+def load_config(path: Path | None = None) -> Config:
+    path = path or CONFIG_PATH
+    if not path.exists():
+        raise FileNotFoundError(f"No config file at {path}")
+    raw = yaml.safe_load(path.read_text()) or {}
+    return Config(**raw, settings=Settings())

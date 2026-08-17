@@ -1,0 +1,131 @@
+# Roxy configuration.
+#
+# Everything machine-specific lives here so the code stays portable: moving to
+# another Pi should mean editing this file and nothing else.
+
+audio:
+  # ALSA device strings. Use names, never card indices -- indices shift when
+  # USB devices are re-plugged or the machine reboots.
+  #   arecord -L   lists capture devices
+  #   aplay -L     lists playback devices
+  # "plug" prefix lets ALSA convert rate/format for us (the mic is natively
+  # 48 kHz stereo; we want 16 kHz mono).
+  input_device: "plughw:CARD=Microphone,DEV=0"
+  output_device: "plughw:CARD=Headphones,DEV=0"
+
+  sample_rate: 16000        # openWakeWord and Whisper both want 16 kHz mono
+  frame_ms: 80              # openWakeWord's native frame size (1280 samples)
+
+wake:
+  model: "hey_jarvis_v0.1"  # stock openWakeWord model; swap for a custom
+                            # "hey roxy" model once trained
+  threshold: 0.5            # raise if it false-triggers, lower if it misses
+  # After a detection, ignore further detections for this long so one utterance
+  # cannot fire twice.
+  refractory_sec: 2.0
+
+utterance:
+  # End-of-speech detection after the wake word fires.
+  vad_aggressiveness: 2     # webrtcvad 0-3; higher = more aggressive filtering
+  # Trailing silence that ends an utterance. Only applies AFTER you've started
+  # talking. This is dead air you feel directly, and 600ms is about the floor
+  # before natural mid-sentence pauses start cutting people off.
+  silence_ms: 600
+
+  # How long to wait for you to start talking in the first place. Raise this if
+  # Roxy gives up while you're still thinking about what to ask.
+  start_timeout_ms: 5000
+
+  # Sustained voice required before Roxy believes you've started. Below this,
+  # a cough or a door closing would start the end-of-speech clock and kill the
+  # turn ~600ms later. Raise it in a noisy room.
+  speech_onset_ms: 120
+
+  min_ms: 400               # shorter than this is treated as a false start
+  max_ms: 15000             # hard cap so a stuck stream can't record forever
+
+models:
+  # Turbo has a distilled decoder: markedly faster and 2.25x cheaper, with a
+  # small accuracy cost that doesn't show up on short English commands.
+  # Switch back to openai/whisper-large-v3 if you need the accuracy.
+  stt: "openai/whisper-large-v3-turbo"
+  llm: "deepseek/deepseek-v4-flash"
+  # Benchmarked 2026-08-17. What matters is synthesis staying ahead of
+  # playback: below real-time, the speaker runs dry and ALSA underruns between
+  # sentences, which costs far more than the gap itself.
+  #   fish-audio/s1            0.3s to first byte, 3.5x real-time, $1.05/1k
+  #                            chosen for the headroom; only one voice though
+  #   deepgram/aura-2          0.4s, 1.5-1.9x real-time, $2.10/1k, 41 voices
+  #   deepgram/flux-tts:free   0.4s, 1.5x real-time, free, 36 voices
+  #   sesame/csm-1b            5.7s -- slower than speech, would underrun
+  #   hexgrad/kokoro-82m       cheapest by far, but was hanging mid-response
+  tts: "fish-audio/s1"
+
+stt:
+  # Pin the language. Whisper otherwise detects it per request from the audio
+  # alone, and on a short, accented, or noisy clip it guesses wrong -- then
+  # transcribes *into* that language, so an English question comes back as
+  # Greek or Spanish. Turbo is more prone to this than full large-v3, whose
+  # undistilled decoder is better at language identification.
+  # Set to "" to restore auto-detection for a multilingual household.
+  language: "en"
+
+  # 0 = deterministic decoding. Higher lets Whisper wander, which is one way to
+  # get a different transcript from identical audio.
+  temperature: 0.0
+
+llm:
+  # A spoken reply wants to be short. 80-100 tokens is plenty and keeps both
+  # cost and time-to-first-word down.
+  # A cap, not a target -- the model stops when it's done, so raising this
+  # costs nothing unless it's actually needed. 100 was truncating replies
+  # mid-word, which is far worse spoken than written.
+  max_tokens: 160
+  temperature: 0.7
+  history_turns: 10         # in-RAM conversational memory
+
+  # DeepSeek V4 is a hybrid reasoning model and decides per-request whether to
+  # think first. Thinking tokens are billed against max_tokens, so on a 100
+  # token budget it can spend the whole allowance reasoning and return an empty
+  # reply -- Roxy says nothing. Measured: 99 of 100 tokens on one arithmetic
+  # question. Leave this off unless you also raise max_tokens a long way.
+  reasoning: false
+  # The "stand your ground" clause is not decoration. Without it the model
+  # folds the moment it's challenged -- it would answer "King Charles the
+  # Third" correctly, then on being told "that's wrong" reply "you're right,
+  # the United Kingdom doesn't have a king". Confidently wrong on the second
+  # try is worse than useless in a voice assistant, where there's no transcript
+  # to scroll back through.
+  system_prompt: >-
+    You are Roxy, a voice assistant. Your replies are spoken aloud, so keep them
+    brief and conversational -- one or two sentences unless asked for detail.
+    Never use markdown, bullet points, or emoji. Write numbers and units the way
+    a person would say them.
+
+    Be accurate. If you don't know something, say so plainly rather than
+    guessing. If you're unsure how current your information is, say that too.
+
+    If the user says you are wrong, do not simply agree. Reconsider honestly:
+    correct yourself only if they have actually identified a mistake. If you
+    still believe your answer was right, say so politely and give your reason
+    in one sentence. Never apologise for a correct answer.
+
+tts:
+  # MUST be set, even though Fish Audio S1 offers only this one value.
+  # Omitting it does NOT fall back to a fixed default -- Fish picks a different
+  # speaker per request. Measured over 5 calls of the same sentence: pitch
+  # ranged 99-156 Hz with no voice set, versus 101-116 Hz with "alloy", i.e. a
+  # different person each time you ask Roxy anything.
+  #
+  # If you switch to a provider with a real voice library, set one here and
+  # audition with ./scripts/try-voices.sh. For deepgram/aura-2:
+  #   female: aura-2-athena-en, thalia, asteria, luna
+  #   male:   aura-2-orion-en, apollo, arcas
+  #   avoid aura-2-zeus-en -- it truncated its sample in testing
+  # To list any provider's voices, send a bogus one; the 400 enumerates them.
+  voice: "alloy"
+
+  # Fallback only. The real rate is read from the response Content-Type, since
+  # models disagree (Fish Audio 44.1 kHz, Kokoro and Deepgram 24 kHz) and
+  # playing at the wrong one is badly wrong, not subtly wrong.
+  sample_rate: 44100

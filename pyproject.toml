@@ -1,0 +1,42 @@
+[project]
+name = "roxy"
+version = "0.1.0"
+description = "Cloud-brain, edge-ears voice assistant for Raspberry Pi"
+requires-python = "==3.11.*"
+dependencies = [
+    # Wake word. Pulls tflite-runtime on Linux, which is why we pin 3.11:
+    # tflite-runtime publishes no wheel past cp311.
+    "openwakeword>=0.6.0",
+    # tflite-runtime 2.14 was built against the numpy 1.x C API and segfaults
+    # or raises "_ARRAY_API not found" under numpy 2.
+    "numpy>=1.26,<2",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "pyyaml>=6.0",
+    "webrtcvad-wheels>=2.0.14",
+    # NB: audio I/O goes through arecord/aplay subprocesses rather than
+    # sounddevice/PortAudio. PortAudio is an extra system package that isn't
+    # present on Pi OS by default, and its device enumeration disagrees with
+    # ALSA naming. alsa-utils ships with the OS and takes the exact device
+    # strings we test with by hand.
+]
+
+[project.scripts]
+roxy = "roxy.__main__:main"
+roxy-probe = "roxy.probe:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/roxy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

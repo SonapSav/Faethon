@@ -1,0 +1,9 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# openWakeWord downloads its pretrained models here on first run
+models/
+*.wav
+!assets/*.wav
