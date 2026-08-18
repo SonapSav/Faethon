@@ -17,13 +17,16 @@ audio:
   frame_ms: 80              # openWakeWord's native frame size (1280 samples)
 
 wake:
-  model: "models/hey_roxy.onnx"   # custom-trained; a path, or a pretrained name
+  # Stock model. The custom models/hey_roxy.onnx is kept in the repo but not in
+  # use: measured on one recording of this voice through this mic, it detected
+  # 1 of ~4 clear "Hey Roxy"s, while hey_jarvis scored 0.9976 on the same clip.
+  # It was trained on synthetic speech only (0.84-0.91 on TTS voices, 0.52-0.55
+  # on a real one), so retraining with real recordings is what would fix it --
+  # validate the next version against your own voice, not against TTS.
+  model: "hey_jarvis_v0.1"
 
-  # Measured against synthesised speech: "Hey Roxy" variants scored 0.84-0.91,
-  # while "Hey Rosie" hit 0.69 and a bare "Roxy" 0.72. 0.78 sits in that gap.
-  # At the old 0.5 default both of those would have woken Roxy.
   # Raise if it false-triggers, lower if it misses you.
-  threshold: 0.78
+  threshold: 0.5
   # After a detection, ignore further detections for this long so one utterance
   # cannot fire twice.
   refractory_sec: 2.0
