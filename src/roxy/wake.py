@@ -68,8 +68,15 @@ class WakeWordDetector:
         self.refractory_sec = refractory_sec
         self._last_fire = 0.0
 
-        log.info("loading wake word model: %s", model_path)
-        self._model = Model(wakeword_models=[model_path], inference_framework="tflite")
+        # openWakeWord picks its runtime from this, not from the file, so a
+        # mismatch fails at load. Custom-trained models are commonly exported
+        # as .onnx while the stock pretrained ones ship as .tflite.
+        framework = "onnx" if model_path.lower().endswith(".onnx") else "tflite"
+
+        log.info("loading wake word model: %s (%s)", model_path, framework)
+        self._model = Model(
+            wakeword_models=[model_path], inference_framework=framework
+        )
         # openWakeWord keys scores by model name, not by the path we passed.
         self.labels = list(self._model.models.keys())
         log.info("wake word ready: %s (threshold %.2f)", self.labels, threshold)

@@ -3,7 +3,12 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-# openWakeWord downloads its pretrained models here on first run
-models/
+# openWakeWord downloads its pretrained models here on first run -- those are
+# re-fetched automatically, so they stay out. Custom-trained models are not
+# recoverable that way, so they must be tracked or a fresh clone loses the
+# wake word.
+models/*
+!models/*.onnx
+!models/*.tflite
 *.wav
 !assets/*.wav
