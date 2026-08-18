@@ -17,16 +17,21 @@ audio:
   frame_ms: 80              # openWakeWord's native frame size (1280 samples)
 
 wake:
-  # Stock model. The custom models/hey_roxy.onnx is kept in the repo but not in
-  # use: measured on one recording of this voice through this mic, it detected
-  # 1 of ~4 clear "Hey Roxy"s, while hey_jarvis scored 0.9976 on the same clip.
-  # It was trained on synthetic speech only (0.84-0.91 on TTS voices, 0.52-0.55
-  # on a real one), so retraining with real recordings is what would fix it --
-  # validate the next version against your own voice, not against TTS.
-  model: "hey_jarvis_v0.1"
+  # "Hey Rhasspy". Named after the offline voice assistant project; no Rhasspy
+  # software is involved. Chosen over "Alexa" and "Hey Jarvis" because it is an
+  # uncommon phrase, so it won't collide with an Echo or with the television.
+  #
+  # Measured on a real recording of this voice through this mic:
+  #   hey_rhasspy   0.9999   all 8 utterances detected, 0.974-0.9999
+  #   hey_jarvis    0.9976
+  #   hey_roxy      0.5494   custom model, 1 of ~4 detected -- see models/
+  model: "hey_rhasspy"
 
+  # True positives land at 0.974-0.9999, while non-target speech scores 0.083
+  # and white noise 0.038. 0.7 sits in that gap with room on both sides: it
+  # caught every attempt in testing while leaving margin against false wakes.
   # Raise if it false-triggers, lower if it misses you.
-  threshold: 0.5
+  threshold: 0.7
   # After a detection, ignore further detections for this long so one utterance
   # cannot fire twice.
   refractory_sec: 2.0
