@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Audition TTS voices through Roxy's actual speaker.
+# Audition TTS voices through Faethon's actual speaker.
 #
-#   ./scripts/try-voices.sh            play the samples in /tmp/roxy-voices
+#   ./scripts/try-voices.sh            play the samples in /tmp/faethon-voices
 #   ./scripts/try-voices.sh regen      re-synthesise them first
 #
 # Pick one, then set it in config.yaml:
@@ -11,9 +11,9 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
 UV="${UV:-$HOME/.local/bin/uv}"
-DIR=/tmp/roxy-voices
+DIR=/tmp/faethon-voices
 
-DEV=$($UV run python -c "from roxy.config import load_config; print(load_config().audio.output_device)")
+DEV=$($UV run python -c "from faethon.config import load_config; print(load_config().audio.output_device)")
 
 if [ "${1:-}" = "regen" ] || [ ! -d "$DIR" ]; then
   echo "Synthesising samples..."

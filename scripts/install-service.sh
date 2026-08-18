@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install (or reinstall) Roxy as a systemd service.
+# Install (or reinstall) Faethon as a systemd service.
 #
 #   sudo ./scripts/install-service.sh
 set -euo pipefail
@@ -10,8 +10,8 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-UNIT_SRC="$PROJECT_DIR/systemd/roxy.service"
-UNIT_DST="/etc/systemd/system/roxy.service"
+UNIT_SRC="$PROJECT_DIR/systemd/faethon.service"
+UNIT_DST="/etc/systemd/system/faethon.service"
 
 # The unit hardcodes paths for the machine it was written on. Rewrite them for
 # wherever the project actually lives, and for whoever owns it.
@@ -31,7 +31,7 @@ echo "uv      : $UV_BIN"
 sed -e "s|^User=.*|User=$OWNER|" \
     -e "s|^Group=.*|Group=$OWNER|" \
     -e "s|^WorkingDirectory=.*|WorkingDirectory=$PROJECT_DIR|" \
-    -e "s|^ExecStart=.*|ExecStart=$UV_BIN run --project $PROJECT_DIR roxy|" \
+    -e "s|^ExecStart=.*|ExecStart=$UV_BIN run --project $PROJECT_DIR faethon|" \
     -e "s|^EnvironmentFile=.*|EnvironmentFile=-$PROJECT_DIR/.env|" \
     -e "s|^ReadWritePaths=.*|ReadWritePaths=$PROJECT_DIR|" \
     "$UNIT_SRC" > "$UNIT_DST"
@@ -42,10 +42,10 @@ if ! id -nG "$OWNER" | grep -qw audio; then
 fi
 
 systemctl daemon-reload
-systemctl enable roxy.service
-systemctl restart roxy.service
+systemctl enable faethon.service
+systemctl restart faethon.service
 sleep 2
 
-systemctl --no-pager status roxy.service || true
+systemctl --no-pager status faethon.service || true
 echo
-echo "Follow the log with:  journalctl -u roxy -f"
+echo "Follow the log with:  journalctl -u faethon -f"

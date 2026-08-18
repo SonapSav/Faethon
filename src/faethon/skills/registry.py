@@ -29,7 +29,7 @@ class Registry:
 
     @classmethod
     def discover(cls) -> Registry:
-        import roxy.skills as pkg
+        import faethon.skills as pkg
 
         registry = cls()
         for info in pkgutil.iter_modules(pkg.__path__):
@@ -38,7 +38,7 @@ class Registry:
             module = importlib.import_module(f"{pkg.__name__}.{info.name}")
             skill = getattr(module, "SKILL", None)
             if skill is None:
-                log.warning("roxy.skills.%s defines no SKILL; ignoring", info.name)
+                log.warning("faethon.skills.%s defines no SKILL; ignoring", info.name)
                 continue
             registry.add(skill)
 

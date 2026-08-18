@@ -42,7 +42,7 @@ class Router:
         self.memory = memory or Memory(config.llm.history_turns)
 
     def handle(self, text: str) -> str:
-        """Return what Roxy should say in response to `text`."""
+        """Return what Faethon should say in response to `text`."""
         if not text.strip():
             return ""
 

@@ -2,7 +2,7 @@
 
     uv run python scripts/make_voice_samples.py
 
-Writes wav files to /tmp/roxy-voices. Play them with scripts/try-voices.sh.
+Writes wav files to /tmp/faethon-voices. Play them with scripts/try-voices.sh.
 
 To see every voice a provider offers, send it a bogus one -- the 400 lists
 them all:
@@ -19,16 +19,16 @@ import time
 import wave
 from pathlib import Path
 
-from roxy.config import load_config
-from roxy.providers import tts as tts_mod
-from roxy.providers.client import OpenRouterClient, OpenRouterError
+from faethon.config import load_config
+from faethon.providers import tts as tts_mod
+from faethon.providers.client import OpenRouterClient, OpenRouterError
 
-OUT = Path("/tmp/roxy-voices")
+OUT = Path("/tmp/faethon-voices")
 
 # A line with a name, a time, and a normal sentence -- enough to judge how a
-# voice handles the things Roxy actually says.
+# voice handles the things the assistant actually says.
 TEXT = (
-    "Hi, I'm Roxy. It's twenty past nine, and the sky looks blue "
+    "Hi, I'm Rhasspy. It's twenty past nine, and the sky looks blue "
     "because sunlight scatters off molecules in the air."
 )
 

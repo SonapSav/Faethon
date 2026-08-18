@@ -4,13 +4,13 @@ The reasoning guard is the important one here. DeepSeek V4 is a hybrid model
 that decides per-request whether to think first, and thinking tokens are billed
 against max_tokens. On a 100-token spoken-reply budget it can spend the whole
 allowance reasoning and return empty content -- measured at 99/100 tokens on one
-arithmetic question -- so Roxy says nothing at all. It's intermittent, so a
+arithmetic question -- so Faethon says nothing at all. It's intermittent, so a
 regression here would be easy to miss by hand.
 """
 
 from __future__ import annotations
 
-from roxy.providers.llm import _payload
+from faethon.providers.llm import _payload
 
 BASE = dict(
     messages=[{"role": "user", "content": "hi"}],

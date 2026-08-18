@@ -41,8 +41,8 @@ class OpenRouterClient:
             headers={
                 "Authorization": f"Bearer {api_key}",
                 # Optional attribution headers OpenRouter uses for its rankings.
-                "HTTP-Referer": "https://github.com/local/roxy",
-                "X-Title": "Roxy",
+                "HTTP-Referer": "https://github.com/local/faethon",
+                "X-Title": "Faethon",
             },
         )
         # Running total for the process, in USD.

@@ -41,7 +41,7 @@ _STRONG = re.compile(r"""[.!?…]["'”’)\]]*(?=\s|$)""")
 _WEAK = re.compile(r"""[,;:—–]["'”’)\]]*(?=\s)""")
 
 # The first chunk can be short: getting *any* audio out fast is what makes
-# Roxy feel responsive. Later chunks want to be longer so prosody holds
+# Faethon feel responsive. Later chunks want to be longer so prosody holds
 # together and we make fewer TTS calls.
 FIRST_MIN_CHARS = 15
 MIN_CHARS = 60

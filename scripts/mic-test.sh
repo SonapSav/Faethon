@@ -17,7 +17,7 @@ echo "device: $DEV"
 echo
 for i in 3 2 1; do printf "\r  starting in %d... " "$i"; sleep 1; done
 printf "\r                        \r"
-echo ">>> SPEAK NOW — say \"Hey Roxy\" a few times <<<"
+echo ">>> SPEAK NOW — say \"Hey Faethon\" a few times <<<"
 echo
 
 # -V mono draws a live meter while recording, so you get feedback as you talk.

@@ -9,7 +9,7 @@ Two distinct clocks, which is the crux of getting this right:
   silence_ms         how long to wait after they STOP before deciding they
                      finished
 
-Conflating them makes Roxy give up on anyone who pauses to think. Worse, a
+Conflating them makes Faethon give up on anyone who pauses to think. Worse, a
 single 20 ms blip of room noise used to count as "they started", after which
 the trailing-silence clock ran and killed the turn ~600 ms later. Speech onset
 therefore requires `speech_onset_ms` of *sustained* voice, and a burst that

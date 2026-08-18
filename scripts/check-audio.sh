@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Roxy audio smoke test: prove the mic hears you and the speaker works,
+# Faethon audio smoke test: prove the mic hears you and the speaker works,
 # before blaming anything further up the stack.
 #
 #   ./scripts/check-audio.sh
@@ -15,8 +15,8 @@ echo "=== Playback devices ==="
 aplay -l || echo "  (none)"
 echo
 
-DEV_IN=$($UV run python -c "from roxy.config import load_config; print(load_config().audio.input_device)")
-DEV_OUT=$($UV run python -c "from roxy.config import load_config; print(load_config().audio.output_device)")
+DEV_IN=$($UV run python -c "from faethon.config import load_config; print(load_config().audio.input_device)")
+DEV_OUT=$($UV run python -c "from faethon.config import load_config; print(load_config().audio.output_device)")
 echo "Configured input : $DEV_IN"
 echo "Configured output: $DEV_OUT"
 echo
@@ -25,8 +25,8 @@ echo "=== Recording 3 seconds -- SAY SOMETHING NOW ==="
 $UV run python - "$DEV_IN" <<'PY'
 import sys, math, struct
 from pathlib import Path
-from roxy.config import load_config
-from roxy.audio import capture, playback
+from faethon.config import load_config
+from faethon.audio import capture, playback
 
 cfg = load_config()
 rate = cfg.audio.sample_rate
@@ -51,14 +51,14 @@ elif peak > 32000:
 else:
     print("  >> Signal looks good.")
 
-out = Path("/tmp/roxy-audiocheck.wav")
+out = Path("/tmp/faethon-audiocheck.wav")
 playback.write_wav(out, pcm, rate)
 print(f"  saved {out}")
 PY
 echo
 
 echo "=== Playing it back ==="
-aplay -D "$DEV_OUT" -q /tmp/roxy-audiocheck.wav && echo "  Did you hear yourself?" \
+aplay -D "$DEV_OUT" -q /tmp/faethon-audiocheck.wav && echo "  Did you hear yourself?" \
   || echo "  PLAYBACK FAILED -- check the speaker is connected to $DEV_OUT"
 echo
 

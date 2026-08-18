@@ -77,7 +77,7 @@ def _payload(
         # DeepSeek V4 is a hybrid: it decides per-request whether to think
         # first, and thinking tokens come out of max_tokens. On a short budget
         # it can spend the entire allowance reasoning and return empty content
-        # -- Roxy then says nothing at all. It's intermittent, which makes it
+        # -- Faethon then says nothing at all. It's intermittent, which makes it
         # worse: the same question can work and then not.
         #
         # Only "enabled": false actually stops it. "exclude": true and

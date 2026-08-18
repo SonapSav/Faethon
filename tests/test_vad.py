@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from roxy.audio.vad import Status, UtteranceRecorder
+from faethon.audio.vad import Status, UtteranceRecorder
 
 RATE = 16000
 FRAME_SAMPLES = 1280                                   # 80 ms

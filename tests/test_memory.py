@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from roxy.memory import Memory
+from faethon.memory import Memory
 
 
 def test_evicts_oldest_beyond_limit():

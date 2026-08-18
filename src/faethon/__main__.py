@@ -1,8 +1,8 @@
-"""Roxy's main loop.
+"""Faethon's main loop.
 
     listen -> wake word -> chime -> record -> STT -> route -> TTS -> listen
 
-Half-duplex by design: the microphone stream is torn down while Roxy speaks.
+Half-duplex by design: the microphone stream is torn down while Faethon speaks.
 Sharing it would mean hearing its own reply and waking on it. Barge-in would
 need echo cancellation, which is a bigger job than v1 warrants.
 """
@@ -28,12 +28,12 @@ from .skills.registry import Registry
 from .speech import speak_streaming
 from .wake import WakeWordDetector
 
-log = logging.getLogger("roxy")
+log = logging.getLogger("faethon")
 
 ACK_SOUND = ASSETS_DIR / "ack.wav"
 
 
-class Roxy:
+class Faethon:
     def __init__(self, config: Config, client: OpenRouterClient) -> None:
         self.config = config
         self.client = client
@@ -63,7 +63,7 @@ class Roxy:
             # sentence, versus 100-112 Hz with a voice set.
             log.warning(
                 "no tts.voice set for %s -- some providers pick a random voice "
-                "per request, so Roxy may sound like a different person each turn",
+                "per request, so Faethon may sound like a different person each turn",
                 config.models.tts,
             )
 
@@ -161,7 +161,7 @@ class Roxy:
     # -- main loop -------------------------------------------------------
 
     def run(self) -> None:
-        log.info("Roxy is listening -- say the wake word")
+        log.info("Faethon is listening -- say the wake word")
         while self._running:
             try:
                 self._listen_once()
@@ -175,7 +175,7 @@ class Roxy:
         """Hold the mic open until a wake word fires, then hand off.
 
         The stream is reopened per turn so the speaker can have the audio
-        device to itself while Roxy talks.
+        device to itself while Faethon talks.
         """
         with capture.open_stream(
             self.config.audio.input_device,
@@ -185,14 +185,14 @@ class Roxy:
             while self._running:
                 if self.detector.process(read_frame()) is not None:
                     self._handle_turn(read_frame)
-                    # Flush the wake model: the tail of Roxy's own reply may
+                    # Flush the wake model: the tail of Faethon's own reply may
                     # still be in its feature buffer.
                     self.detector.reset()
                     log.info("listening again")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="roxy", description="Roxy voice assistant")
+    parser = argparse.ArgumentParser(prog="faethon", description="Faethon voice assistant")
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     parser.add_argument("--config", help="path to config.yaml")
     args = parser.parse_args()
@@ -216,12 +216,12 @@ def main() -> int:
         log.error("%s", e)
         return 1
 
-    roxy = Roxy(config, client)
+    faethon = Faethon(config, client)
     for sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, roxy.stop)
+        signal.signal(sig, faethon.stop)
 
     try:
-        roxy.run()
+        faethon.run()
     finally:
         client.close()
     return 0

@@ -73,7 +73,7 @@ class Skill(ABC):
 
     @abstractmethod
     def run(self, **params: Any) -> str:
-        """Perform the skill. Returns what Roxy should say back.
+        """Perform the skill. Returns what Faethon should say back.
 
         Must tolerate being called with no arguments: the regex path may match
         a pattern with no capture groups, and a model may omit optional ones.

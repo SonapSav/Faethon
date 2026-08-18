@@ -1,9 +1,9 @@
 """Smoke-test each provider in isolation.
 
-    uv run roxy-probe stt [file.wav]     record 4s (or read a wav) and transcribe
-    uv run roxy-probe llm "why is the sky blue"
-    uv run roxy-probe tts "hello, I am Roxy"
-    uv run roxy-probe chain                 record -> stt -> llm -> tts
+    uv run faethon-probe stt [file.wav]     record 4s (or read a wav) and transcribe
+    uv run faethon-probe llm "why is the sky blue"
+    uv run faethon-probe tts "hello, I am Faethon"
+    uv run faethon-probe chain                 record -> stt -> llm -> tts
 
 Prints the running cost so you can see what a turn actually costs.
 """
@@ -70,7 +70,7 @@ def cmd_llm(cfg, client, args) -> None:
 
 def cmd_tts(cfg, client, args) -> None:
     """Streams to the speaker and reports time-to-first-audio, which is the
-    number that decides whether Roxy feels responsive."""
+    number that decides whether Faethon feels responsive."""
     t0 = time.monotonic()
     first: float | None = None
     total = 0
@@ -96,7 +96,7 @@ def cmd_tts(cfg, client, args) -> None:
 def cmd_say(cfg, client, args) -> None:
     """Ask the LLM and speak the reply as it streams.
 
-    Compare against `roxy-probe llm` + `roxy-probe tts` run back to back: this
+    Compare against `faethon-probe llm` + `faethon-probe tts` run back to back: this
     should start talking far sooner.
     """
     from .providers import llm as llm_stream
@@ -212,7 +212,7 @@ def cmd_chain(cfg, client, args) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="roxy-probe", description=__doc__,
+    parser = argparse.ArgumentParser(prog="faethon-probe", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="cmd", required=True)

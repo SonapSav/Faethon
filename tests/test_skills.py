@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from roxy.skills.base import Skill
-from roxy.skills.registry import Registry
-from roxy.skills.time_skill import SKILL as TIME_SKILL
+from faethon.skills.base import Skill
+from faethon.skills.registry import Registry
+from faethon.skills.time_skill import SKILL as TIME_SKILL
 
 
 class Dummy(Skill):

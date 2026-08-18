@@ -1,7 +1,7 @@
 """Wake word detection with openWakeWord.
 
 Runs locally on every 80 ms frame -- this is the only model on the Pi, and the
-reason nothing leaves the house until Roxy is actually addressed.
+reason nothing leaves the house until Faethon is actually addressed.
 
 The pretrained models land in openWakeWord's own resources directory inside the
 venv. That means a fresh machine downloads them once on first run, which is the
@@ -84,7 +84,7 @@ class WakeWordDetector:
     def reset(self) -> None:
         """Clear the model's internal audio buffer.
 
-        Call after Roxy finishes speaking: otherwise the tail of its own reply
+        Call after Faethon finishes speaking: otherwise the tail of its own reply
         is still sitting in the feature buffer and can trigger a detection.
         """
         self._model.reset()

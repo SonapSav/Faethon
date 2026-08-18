@@ -15,9 +15,9 @@ from contextlib import contextmanager
 
 import pytest
 
-from roxy import speech
-from roxy.config import load_config
-from roxy.providers.client import OpenRouterError
+from faethon import speech
+from faethon.config import load_config
+from faethon.providers.client import OpenRouterError
 
 
 @pytest.fixture
@@ -117,7 +117,7 @@ def test_whitespace_chunks_are_skipped(rig, config):
 
 
 def test_a_failing_sentence_does_not_hang_the_turn(rig, config):
-    # A dead synthesis worker must still release the player, or Roxy freezes.
+    # A dead synthesis worker must still release the player, or Faethon freezes.
     rig.fail = {"BBBB"}
     t0 = time.monotonic()
     speech.speak_streaming(object(), config, iter(["AAAA", "BBBB", "CCCC"]))
@@ -147,7 +147,7 @@ def test_returns_the_text_it_spoke(rig, config):
 def test_rate_is_read_from_the_response(content_type, expected):
     # Models disagree: Fish Audio returns 44.1kHz, Kokoro and Deepgram 24kHz.
     # Playing 44.1k audio at 24k runs it at 0.54x speed.
-    from roxy.providers.tts import rate_from_content_type
+    from faethon.providers.tts import rate_from_content_type
     assert rate_from_content_type(content_type) == expected
 
 

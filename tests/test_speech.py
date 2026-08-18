@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from roxy.speech import FIRST_MIN_CHARS, MAX_CHARS, sentence_chunks
+from faethon.speech import FIRST_MIN_CHARS, MAX_CHARS, sentence_chunks
 
 
 def as_deltas(text: str, size: int = 3):

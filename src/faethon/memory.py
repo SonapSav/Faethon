@@ -1,6 +1,6 @@
 """Short conversational memory: the last N exchanges, in RAM only.
 
-Deliberately not persisted. Roxy forgets on restart, which is the right
+Deliberately not persisted. Faethon forgets on restart, which is the right
 default for an always-on microphone in a home.
 """
 
@@ -12,7 +12,7 @@ from typing import Any
 
 class Memory:
     def __init__(self, max_turns: int = 10) -> None:
-        # One turn is a user message plus Roxy's reply.
+        # One turn is a user message plus Faethon's reply.
         self._turns: deque[tuple[str, str]] = deque(maxlen=max_turns)
 
     def add(self, user: str, assistant: str) -> None:

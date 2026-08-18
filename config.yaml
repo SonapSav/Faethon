@@ -1,4 +1,4 @@
-# Roxy configuration.
+# Faethon configuration.
 #
 # Everything machine-specific lives here so the code stays portable: moving to
 # another Pi should mean editing this file and nothing else.
@@ -45,10 +45,10 @@ utterance:
   silence_ms: 600
 
   # How long to wait for you to start talking in the first place. Raise this if
-  # Roxy gives up while you're still thinking about what to ask.
+  # Faethon gives up while you're still thinking about what to ask.
   start_timeout_ms: 5000
 
-  # Sustained voice required before Roxy believes you've started. Below this,
+  # Sustained voice required before Faethon believes you've started. Below this,
   # a cough or a door closing would start the end-of-speech clock and kill the
   # turn ~600ms later. Raise it in a noisy room.
   speech_onset_ms: 120
@@ -99,17 +99,17 @@ llm:
   # DeepSeek V4 is a hybrid reasoning model and decides per-request whether to
   # think first. Thinking tokens are billed against max_tokens, so on a 100
   # token budget it can spend the whole allowance reasoning and return an empty
-  # reply -- Roxy says nothing. Measured: 99 of 100 tokens on one arithmetic
+  # reply -- Faethon says nothing. Measured: 99 of 100 tokens on one arithmetic
   # question. Leave this off unless you also raise max_tokens a long way.
   reasoning: false
   # The "stand your ground" clause is not decoration. Without it the model
-  # folds the moment it's challenged -- it would answer "King Charles the
+  # folds the moment it is challenged -- it would answer "King Charles the
   # Third" correctly, then on being told "that's wrong" reply "you're right,
   # the United Kingdom doesn't have a king". Confidently wrong on the second
   # try is worse than useless in a voice assistant, where there's no transcript
   # to scroll back through.
   system_prompt: >-
-    You are Roxy, a voice assistant. Your replies are spoken aloud, so keep them
+    You are Rhasspy, a voice assistant. Your replies are spoken aloud, so keep them
     brief and conversational -- one or two sentences unless asked for detail.
     Never use markdown, bullet points, or emoji. Write numbers and units the way
     a person would say them.
@@ -127,7 +127,7 @@ tts:
   # Omitting it does NOT fall back to a fixed default -- Fish picks a different
   # speaker per request. Measured over 5 calls of the same sentence: pitch
   # ranged 99-156 Hz with no voice set, versus 101-116 Hz with "alloy", i.e. a
-  # different person each time you ask Roxy anything.
+  # different person each time you ask Faethon anything.
   #
   # If you switch to a provider with a real voice library, set one here and
   # audition with ./scripts/try-voices.sh. For deepgram/aura-2:

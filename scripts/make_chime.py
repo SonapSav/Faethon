@@ -1,4 +1,4 @@
-"""Generate assets/ack.wav -- the sound Roxy makes when the wake word lands.
+"""Generate assets/ack.wav -- the sound Faethon makes when the wake word lands.
 
 Two short ascending sine blips with a raised-cosine envelope. The envelope
 matters: a bare sine switched on and off clicks audibly.

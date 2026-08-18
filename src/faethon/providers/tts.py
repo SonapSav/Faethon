@@ -5,7 +5,7 @@ POST /audio/speech
   -> raw audio bytes (NOT JSON)
 
 We ask for pcm rather than mp3 so chunks can go straight to aplay as they
-arrive -- no decoder in the middle, and Roxy starts talking before synthesis
+arrive -- no decoder in the middle, and Faethon starts talking before synthesis
 has finished.
 """
 

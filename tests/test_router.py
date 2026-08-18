@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from roxy.config import Config, load_config
-from roxy.memory import Memory
-from roxy.providers.llm import LLMReply, ToolCall
-from roxy.router import Router
-from roxy.skills.base import Skill
-from roxy.skills.registry import Registry
+from faethon.config import Config, load_config
+from faethon.memory import Memory
+from faethon.providers.llm import LLMReply, ToolCall
+from faethon.router import Router
+from faethon.skills.base import Skill
+from faethon.skills.registry import Registry
 
 
 class Echo(Skill):
@@ -83,7 +83,7 @@ def router(config, monkeypatch):
         calls.append({"messages": messages, **kwargs})
         return r.replies.pop(0) if r.replies else LLMReply(text="fallback")
 
-    monkeypatch.setattr("roxy.router.llm_mod.complete", fake_complete)
+    monkeypatch.setattr("faethon.router.llm_mod.complete", fake_complete)
     return r
 
 
