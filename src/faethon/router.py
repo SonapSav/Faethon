@@ -17,12 +17,13 @@ API call to get there.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from .config import Config
 from .memory import Memory
 from .providers import llm as llm_mod
 from .providers.client import OpenRouterClient, OpenRouterError
+from .skills.base import Skill
 from .skills.registry import Registry
 
 log = logging.getLogger(__name__)
@@ -49,12 +50,14 @@ class Router:
         #: Set for the duration of one turn when a skill wipes memory, so the
         #: exchange that asked for the wipe is not then recorded into it.
         self._skip_record = False
+        #: A skill's after_reply, waiting for the reply to finish being spoken.
+        self._pending_action: Callable[[], None] | None = None
 
     def handle(self, text: str) -> str:
         """Return what Faethon should say in response to `text`."""
         if not text.strip():
             return ""
-        self._skip_record = False
+        self._reset_turn()
 
         spoken = self._local_skill_match(text)
         if spoken is None:
@@ -74,10 +77,7 @@ class Router:
         """
         if not text.strip():
             return
-        # Reset per turn rather than after use: a barge-in can abandon this
-        # generator before the recording step, and a flag left set would
-        # silently swallow the next turn instead.
-        self._skip_record = False
+        self._reset_turn()
 
         hit = self.registry.match(text)
         if hit is not None:
@@ -212,6 +212,12 @@ class Router:
             log.exception("skill %s raised", name)
             return f"Something went wrong running {name.replace('_', ' ')}."
 
+        # An overridden after_reply is the declaration that something has to
+        # happen once the speaker is done. Checked against the base method
+        # rather than a separate flag, which could fall out of step with it.
+        if type(skill).after_reply is not Skill.after_reply:
+            self._pending_action = skill.after_reply
+
         if skill.clears_memory:
             # Now, not at the end of the turn: a barge-in can abandon this
             # exchange part-way, and "cleared, mostly" is not a useful state.
@@ -219,6 +225,27 @@ class Router:
             self._skip_record = True
             log.info("memory cleared by %s", name)
         return spoken
+
+    def _reset_turn(self) -> None:
+        """Clear per-turn state before routing.
+
+        Reset here rather than after use, because a turn can be abandoned
+        part-way -- barge-in closes the generator, or the caller stops
+        consuming it. State left set then leaks into somebody else's turn: a
+        swallowed recording, or worse, a restart that fires after an unrelated
+        question.
+        """
+        self._skip_record = False
+        self._pending_action = None
+
+    def take_pending_action(self) -> Callable[[], None] | None:
+        """Hand back the deferred action, if a skill left one, and forget it.
+
+        Taken rather than read so it cannot run twice, and so an abandoned turn
+        does not leave it primed for the next one.
+        """
+        action, self._pending_action = self._pending_action, None
+        return action
 
     def _record(self, text: str, spoken: str) -> None:
         """Add the exchange to memory, unless a skill just wiped it.

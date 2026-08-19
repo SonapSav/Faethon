@@ -320,6 +320,33 @@ fails in the worst way available: it falls through to the LLM, which cannot see
 your balance and will invent a plausible one. `open[\s.\-]*r[oeu]{1,3}ter`
 accepts the vowel cluster loosely instead.
 
+## Restarting it
+
+Say **"Hey Rhasspy, restart yourself"** — also "restart the assistant",
+"restart the service" — and it answers "Restarting now. Back in a few
+seconds." then exits. `Restart=always` in the unit brings it back about five
+seconds later, so this needs no privileges at all.
+
+Two details that are invisible until they go wrong:
+
+- **The exit happens after the reply, not during it.** Killing the process
+  inside the skill means the sentence is never spoken, and silence followed by
+  a dead assistant is indistinguishable from a crash. Skills defer that kind of
+  work by overriding `after_reply`, which the main loop runs once the speaker
+  has finished.
+- **It is hidden from the LLM.** `regex_only = True` keeps it out of the tool
+  list, so only the patterns can reach it. A model that decides for itself when
+  to use its tools should not have a restart within reach of "this keeps
+  freezing, what should I do?".
+
+Restarting forgets the conversation, since memory is RAM-only. That is what a
+restart has always done, not something this adds.
+
+**Rebooting the Pi is deliberately not implemented.** It would need either a
+polkit rule for `org.freedesktop.login1.reboot` or a sudoers entry plus
+dropping `NoNewPrivileges` from the unit — a real privilege for a command one
+mis-transcription away from taking the machine down. Use SSH.
+
 ## Writing a skill
 
 Drop a file in `src/faethon/skills/`. The registry finds it — no imports to

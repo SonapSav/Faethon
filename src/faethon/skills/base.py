@@ -36,6 +36,11 @@ class Skill(ABC):
     #: exchange that asked for it, so "clear the buffer" does not become the
     #: first thing in the fresh buffer.
     clears_memory: ClassVar[bool] = False
+    #: Keep this skill out of the LLM's tool list, so it is reachable only by
+    #: the patterns above. For anything with a consequence: the model is
+    #: helpful, and "this keeps freezing, what should I do?" should not put a
+    #: restart within its reach.
+    regex_only: ClassVar[bool] = False
 
     def __init__(self) -> None:
         self._compiled = [re.compile(p, re.IGNORECASE) for p in self.patterns]
@@ -75,6 +80,15 @@ class Skill(ABC):
                 "parameters": self.parameters,
             },
         }
+
+    def after_reply(self) -> None:
+        """Run once the reply has finished being spoken.
+
+        For actions that kill the process doing the speaking. Doing them inside
+        `run()` means the reply is never heard, which is indistinguishable from
+        a crash. Overriding this is what tells the router there is anything to
+        defer.
+        """
 
     @abstractmethod
     def run(self, **params: Any) -> str:

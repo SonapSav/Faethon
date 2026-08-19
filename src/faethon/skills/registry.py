@@ -70,6 +70,10 @@ class Registry:
         return None
 
     def tool_schemas(self) -> list[dict[str, Any]]:
-        """Tool definitions for the LLM. Unavailable skills are omitted so the
-        model can't offer something that would only fail."""
-        return [s.tool_schema() for s in self if s.available]
+        """Tool definitions for the LLM.
+
+        Unavailable skills are omitted so the model can't offer something that
+        would only fail, and regex_only ones so it can't reach a consequence it
+        was never asked to cause.
+        """
+        return [s.tool_schema() for s in self if s.available and not s.regex_only]

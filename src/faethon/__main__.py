@@ -166,6 +166,13 @@ class Faethon:
         # so the user hears the first words long before the last are decided.
         spoken = self._speak_reply(read_frame, text)
 
+        # Anything a skill deferred until it had been heard -- currently only
+        # the restart, which ends this process. Runs after the speaker is done
+        # and before the follow-up window opens.
+        action = self.router.take_pending_action()
+        if action is not None:
+            action()
+
         total = time.monotonic() - started
         log.info(
             "turn: %.1fs audio | stt %.2fs | reply+speech %.2fs | total %.2fs%s | $%.5f",
