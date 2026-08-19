@@ -52,8 +52,10 @@ def synthesize_stream(
     `on_rate` is called with the response's sample rate before any audio, so
     the caller can open the output device at the right rate.
 
-    `voice` may be None: some providers (Fish Audio) reject the field entirely,
-    while others require it.
+    `voice` may be None, which is not the same as a default: a provider that
+    accepts an empty voice may pick a different speaker per request, so Faethon
+    sounds like a different person every time. Send one where the provider has
+    one. An unknown voice is a 400, and the error lists the valid ones.
     """
     # Empty input makes the provider return 400, and whitespace-only burns a
     # request to get zero bytes back. Neither should reach the network.

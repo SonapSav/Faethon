@@ -327,9 +327,13 @@ Two gotchas the code now handles for you:
   24kHz. Playing one at the other's rate isn't subtle — 44.1k played as 24k
   runs at 0.54× speed. The rate is read from the response `Content-Type`;
   `tts.sample_rate` in the config is only a fallback.
-- **Voices differ.** Fish Audio rejects a `voice` field entirely (leave it
-  `""`), Deepgram requires one. To see a provider's voices, send a bogus one —
-  the 400 lists them all.
+- **Voices differ, and an empty voice is not a default.** Fish Audio S1 offers
+  exactly one, `alloy`, and you have to ask for it: omitting the field does not
+  fall back to a fixed speaker, it picks a different one per request. Measured
+  over five renders of one sentence, pitch ranged 99–156 Hz unset against
+  101–116 Hz with `alloy` — a different person each time you ask Faethon
+  anything. Deepgram requires a voice outright. To see a provider's voices,
+  send a bogus one; the 400 lists them.
 
 ## A note on the LLM
 

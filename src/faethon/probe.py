@@ -233,7 +233,7 @@ def main() -> int:
 
     p = sub.add_parser("tts", help="speak some text")
     p.add_argument("text")
-    p.add_argument("--voice", help="override the configured Kokoro voice")
+    p.add_argument("--voice", help="override the configured tts.voice")
     p.set_defaults(fn=cmd_tts)
 
     p = sub.add_parser("say", help="ask the LLM and speak the reply as it streams")

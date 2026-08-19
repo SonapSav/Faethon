@@ -105,7 +105,8 @@ class LLMConfig(BaseModel):
 
 
 class TTSConfig(BaseModel):
-    #: Empty for providers that reject a voice field (e.g. Fish Audio).
+    #: Empty is not the same as a default: a provider that accepts no voice may
+    #: pick a different speaker per request. Faethon warns at startup if unset.
     voice: str = ""
     #: Fallback only -- the real rate comes from the response Content-Type.
     sample_rate: int = 24000
