@@ -27,6 +27,7 @@ from pathlib import Path
 
 from .audio import capture, playback
 from .audio.vad import Status, UtteranceRecorder
+from .bargein import BargeInListener
 from .config import ASSETS_DIR, Config, load_config
 from .memory import Memory
 from .providers import stt as stt_mod
@@ -34,7 +35,7 @@ from .providers import tts as tts_mod
 from .providers.client import OpenRouterClient, OpenRouterError
 from .router import Router
 from .skills.registry import Registry
-from .speech import speak_streaming
+from .speech import Spoken, speak_streaming
 from .wake import WakeWordDetector
 
 log = logging.getLogger("faethon")
@@ -160,18 +161,48 @@ class Faethon:
 
         # The reply is spoken sentence by sentence as the model generates it,
         # so the user hears the first words long before the last are decided.
-        spoken = speak_streaming(
-            self.client, self.config, self.router.handle_streaming(text)
-        )
+        spoken = self._speak_reply(read_frame, text)
 
         total = time.monotonic() - started
         log.info(
-            "turn: %.1fs audio | stt %.2fs | reply+speech %.2fs | total %.2fs | $%.5f",
-            audio_sec, t_stt, total - t_stt, total, self.client.spent,
+            "turn: %.1fs audio | stt %.2fs | reply+speech %.2fs | total %.2fs%s | $%.5f",
+            audio_sec, t_stt, total - t_stt, total,
+            " | interrupted" if spoken.interrupted else "", self.client.spent,
         )
         if not spoken:
             log.info("nothing to say")
-        return bool(spoken)
+        # An interruption is a reason to keep listening even if nothing was
+        # spoken before the cut: saying the wake word means "I want to talk".
+        return bool(spoken) or spoken.interrupted
+
+    def _speak_reply(self, read_frame, text: str) -> Spoken:
+        """Speak the reply, watching for the wake word if barge-in is on."""
+        chunks = self.router.handle_streaming(text)
+        if not self.config.conversation.barge_in:
+            return speak_streaming(self.client, self.config, chunks)
+
+        # The speaker does not exist until speak_streaming builds one, but the
+        # listener needs something to stop the moment it hears the wake word.
+        # A one-element list is the handoff between the two threads.
+        current: list = []
+
+        def interrupt() -> None:
+            if current:
+                current[0].stop()
+
+        listener = BargeInListener(
+            read_frame, self.detector, interrupt,
+            threshold=self.config.conversation.barge_in_threshold,
+        )
+        with listener:
+            spoken = speak_streaming(
+                self.client, self.config, chunks, on_start=current.append
+            )
+        if listener.error is not None:
+            # The mic died while Faethon was talking. Raise it on the main
+            # thread so the run loop's reconnect handles it as usual.
+            raise listener.error
+        return spoken
 
     def _converse(self, stream) -> None:
         """Run turns back to back until the user stops answering.

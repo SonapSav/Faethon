@@ -162,3 +162,114 @@ def test_a_different_model_rate_is_honoured_too(rig, config):
     rig.rate = 24000
     speech.speak_streaming(object(), config, iter(["AAAA"]))
     assert rig.opened_at == [24000]
+
+
+# -- barge-in ----------------------------------------------------------------
+# Stopping a reply is not the same as ending one: ending closes the pipe and
+# lets aplay play out everything buffered, which on this Pi measured 9.1s of
+# talking after the decision to stop. Aborting kills it instead, at 234ms.
+
+
+def test_stopping_aborts_playback_rather_than_draining_it(config, monkeypatch):
+    aborted = []
+
+    class AbortableSink:
+        def __call__(self, chunk): pass
+        def abort(self): aborted.append(True)
+
+    @contextmanager
+    def fake_stream(device, rate):
+        yield AbortableSink()
+
+    monkeypatch.setattr(speech.playback, "stream", fake_stream)
+    monkeypatch.setattr(speech, "PREBUFFER_MS", 0)   # open on the first chunk
+    monkeypatch.setattr(
+        speech.tts_mod, "synthesize_stream",
+        lambda *a, on_rate=None, **kw: iter([b"\x00\x01" * 64]),
+    )
+
+    speaker = speech._Speaker(object(), config)
+    speaker.start()
+    speaker.send("AAAA")
+    for _ in range(300):                     # wait for the device to open
+        if speaker._sink is not None:
+            break
+        time.sleep(0.01)
+    assert speaker._sink is not None, "device never opened"
+    speaker.stop()
+    speaker.finish()
+    assert aborted, "stop() did not abort the playback stream"
+
+
+def test_stopping_before_any_audio_opens_no_device(config, monkeypatch):
+    """Interrupting during the pre-roll must not start the speaker up.
+
+    The reply was cut off before a word of it was audible, so opening the
+    device to play the pre-roll out would be Faethon talking after being told
+    to stop.
+    """
+    opened = []
+
+    @contextmanager
+    def fake_stream(device, rate):
+        opened.append(rate)
+        yield lambda chunk: None
+
+    monkeypatch.setattr(speech.playback, "stream", fake_stream)
+
+    speaker = speech._Speaker(object(), config)
+    speaker.start()
+    speaker.stop()
+    speaker.send("AAAA")
+    speaker.finish()
+    assert not opened
+
+
+def test_stop_is_idempotent(rig, config):
+    speaker = speech._Speaker(object(), config)
+    speaker.start()
+    speaker.stop()
+    speaker.stop()
+    assert speaker.stopped
+    speaker.finish()
+
+
+def test_an_interrupted_reply_stops_pulling_from_the_model(rig, config):
+    """The rest of the reply is neither wanted nor free."""
+    pulled: list[str] = []
+
+    def chunks():
+        for c in ["AAAA", "BBBB", "CCCC", "DDDD"]:
+            pulled.append(c)
+            yield c
+
+    def stop_after_first(speaker):
+        speaker.stop()
+
+    out = speech.speak_streaming(
+        object(), config, chunks(), on_start=stop_after_first
+    )
+    assert out.interrupted
+    assert len(pulled) < 4, f"kept pulling after the stop: {pulled}"
+
+
+def test_an_uninterrupted_reply_is_not_marked_interrupted(rig, config):
+    out = speech.speak_streaming(object(), config, iter(["AAAA", "BBBB"]))
+    assert not out.interrupted
+    assert out == "AAAA BBBB"
+
+
+def test_the_generator_is_closed_so_memory_still_records(rig, config):
+    """Closing unwinds the router's generator, whose finally records what was
+    said. Leaving it open would lose an interrupted turn from memory."""
+    closed = []
+
+    def chunks():
+        try:
+            yield "AAAA"
+            yield "BBBB"
+        finally:
+            closed.append(True)
+
+    speech.speak_streaming(object(), config, chunks())
+    assert closed

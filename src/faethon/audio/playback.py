@@ -4,12 +4,26 @@ Two modes:
   play_bytes  -- blocking, for short fully-buffered clips (the ack chime)
   stream      -- feed PCM in as it arrives, so TTS starts speaking before
                  synthesis has finished
+
+A stream can also be aborted, which is how barge-in stops a reply mid-sentence.
+That is a different operation from ending one: closing the pipe lets `aplay`
+play out everything already buffered, which for a long reply means it keeps
+talking for seconds after being told to stop. Measured on this Pi, from the
+instant of the decision to actual silence:
+
+    close stdin and wait   9112 ms
+    terminate (SIGTERM)     234 ms
+    kill (SIGKILL)          110 ms
+
+SIGTERM is the one to want: near enough instant, and it lets aplay close the
+PCM device rather than leaving ALSA to clean up after it.
 """
 
 from __future__ import annotations
 
 import logging
 import subprocess
+import threading
 import wave
 from contextlib import contextmanager
 from pathlib import Path
@@ -50,29 +64,68 @@ def play_wav_async(path: Path, device: str) -> subprocess.Popen:
     )
 
 
+class Sink:
+    """Somewhere to write PCM: call it to play, `abort()` to stop dead.
+
+    Callable rather than a plain method so every existing `write(chunk)` call
+    site keeps working.
+    """
+
+    def __init__(self, write, abort) -> None:
+        self._write = write
+        self._abort = abort
+
+    def __call__(self, chunk: bytes) -> None:
+        self._write(chunk)
+
+    def abort(self) -> None:
+        """Stop now, discarding whatever is already buffered.
+
+        Safe to call from another thread, and safe to call twice. This is what
+        barge-in uses; leaving the stream to close normally would play the rest
+        of the reply out regardless.
+        """
+        self._abort()
+
+
 @contextmanager
 def stream(device: str, sample_rate: int):
-    """Yield a write() that pipes PCM straight to the speaker as it arrives."""
+    """Yield a `Sink` that pipes PCM straight to the speaker as it arrives."""
     proc = subprocess.Popen(
         _cmd(device, sample_rate),
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
+    aborted = threading.Event()
 
     def write(chunk: bytes) -> None:
+        if aborted.is_set():
+            return
         try:
             proc.stdin.write(chunk)
-        except BrokenPipeError:
-            log.warning("playback pipe closed early")
+        except (BrokenPipeError, ValueError):
+            # ValueError: aborted between the check above and the write.
+            if not aborted.is_set():
+                log.warning("playback pipe closed early")
+
+    def abort() -> None:
+        if aborted.is_set():
+            return
+        # Set this first: the play thread may be blocked in write() under
+        # aplay's backpressure, and terminating unblocks it with a broken pipe
+        # that must not be logged as a fault.
+        aborted.set()
+        proc.terminate()
 
     try:
-        yield write
+        yield Sink(write, abort)
     finally:
-        try:
-            proc.stdin.close()
-        except BrokenPipeError:
-            pass
+        if not aborted.is_set():
+            try:
+                proc.stdin.close()
+            except (BrokenPipeError, ValueError):
+                pass
         proc.wait()
 
 

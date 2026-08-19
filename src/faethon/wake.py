@@ -81,14 +81,23 @@ class WakeWordDetector:
         self.labels = list(self._model.models.keys())
         log.info("wake word ready: %s (threshold %.2f)", self.labels, threshold)
 
-    def reset(self) -> None:
+    def reset(self, arm_refractory: bool = True) -> None:
         """Clear the model's internal audio buffer.
 
         Call after Faethon finishes speaking: otherwise the tail of its own reply
         is still sitting in the feature buffer and can trigger a detection.
+
+        `arm_refractory=False` leaves the detector able to fire immediately.
+        Barge-in needs that: the wake word that started the turn set the
+        refractory clock, and someone who wants to interrupt a reply that
+        began a second later must not be ignored for being too quick.
         """
         self._model.reset()
-        self._last_fire = time.monotonic()
+        # 0.0 rather than "leave it alone": the refractory clock may already be
+        # running from the wake word that opened this turn, and a barge-in
+        # listener that inherited it would ignore the first two seconds of
+        # exactly the reply people most want to cut short.
+        self._last_fire = time.monotonic() if arm_refractory else 0.0
 
     def process(self, frame: bytes) -> float | None:
         """Feed one frame. Returns the score if the wake word fired, else None."""

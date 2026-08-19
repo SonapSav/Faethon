@@ -13,7 +13,8 @@ mic → wake word (local) → chime → record → STT → skill or LLM → TTS 
 
 Only the first thing you say needs the wake word. Faethon listens again for
 five seconds after each reply, so "and what about tomorrow?" just works. Say
-nothing and a falling chime closes the conversation.
+nothing and a falling chime closes the conversation. Say the wake word while
+it's still talking and it stops.
 
 The reply is spoken sentence by sentence as the model generates it, rather than
 after. Waiting for the whole reply costs (generation + synthesis); streaming
@@ -142,6 +143,55 @@ above about 8s the pause after a reply starts to feel like a hang. Set
 A follow-up turn is a turn like any other: it goes into the same 10-turn
 memory, so pronouns carry across ("what's the capital of France?" → "how big is
 it?").
+
+### Interrupting a reply
+
+Say **"Hey Rhasspy"** while Faethon is talking and it stops mid-sentence, then
+listens. Useful when a one-line question gets a paragraph.
+
+```yaml
+conversation:
+  barge_in: true
+  barge_in_threshold: 0.1
+```
+
+Interrupting normally needs acoustic echo cancellation, because the microphone
+hears the assistant far louder than it hears the room. Listening for a
+*phrase* sidesteps that: a wake-word model isn't asking "is someone talking",
+it's asking "was that 'hey rhasspy'", and Faethon never says its own wake word.
+Playing a 30-second reply through the speaker and scoring the recorded
+microphone gave a median of 0.0000 and a peak of 0.0014 — no false trigger,
+against a threshold of 0.7.
+
+**`barge_in_threshold` is much lower than `wake.threshold` and has to be.**
+Faethon's voice doesn't trigger the detector, but it does mask yours. Playing a
+reply and a real recording of the wake word through the speaker together, at
+the equal loudness they measured at the mic:
+
+| what the detector hears | score |
+|---|---|
+| wake word, quiet room | 0.9999 |
+| wake word, over Faethon talking | **0.3681** |
+| Faethon talking, no wake word | 0.0002 |
+
+At the 0.7 used for waking, barge-in never fires at all. 0.1 sits 3.5× below
+the masked phrase and 500× above the self-audio floor.
+
+Detection falls off sharply once Faethon is louder than you are at the
+microphone — measured against a file mix, the score went 0.998 at a quarter of
+your volume, 0.925 at half, and 0.118 at equal. **If you have to shout, turn
+the speaker down** rather than dropping the threshold further.
+
+Stopping is not the same as finishing. Ending a reply closes the pipe and lets
+`aplay` play out everything buffered, which measured **9.1 seconds** of talking
+after the decision to stop; barge-in terminates it instead, at 234ms. It also
+stops pulling from the model, so an interrupted reply stops costing tokens, and
+records what was actually said to memory — otherwise "what did you just say?"
+would draw a blank and asking again would replay the whole answer.
+
+One limit: Faethon can only notice the interruption between sentences of the
+*model's* output, so if generation stalls, the listening window opens a beat
+late. The audio stops immediately either way.
 
 Two things this needs that aren't obvious:
 
@@ -345,8 +395,9 @@ while still correcting itself when genuinely wrong (7 × 8).
 
 ## Known limits
 
-- **Half-duplex.** Faethon can't hear you while it's talking; interrupting it
-  would need echo cancellation. A follow-up can only start once it has stopped.
+- **Half-duplex except for the wake word.** Faethon can't understand you while
+  it's talking — only spot its own wake phrase, which is what barge-in uses.
+  Anything else you say during a reply is lost.
 - **A follow-up window has no cap on how long a conversation can run.** Anything
   that keeps producing speech Whisper will transcribe — a television in the same
   room — can hold one open indefinitely, and every turn is a paid API call.

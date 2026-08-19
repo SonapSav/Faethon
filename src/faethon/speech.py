@@ -22,7 +22,7 @@ import queue
 import re
 import threading
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 
 from .audio import playback
@@ -61,6 +61,12 @@ LOOKAHEAD = 2
 # bytes arrive means any hiccup upstream underruns the card, and recovery costs
 # far more than this delay does.
 PREBUFFER_MS = 700
+
+# How often the play thread looks up from its queues to notice it has been
+# stopped. Small next to the ~230ms it takes the speaker to fall silent anyway,
+# so it costs nothing perceptible and saves blocking on a sentence that will
+# never be spoken.
+POLL_SEC = 0.05
 
 
 def _find_cut(buf: str, min_chars: int, allow_weak: bool) -> int | None:
@@ -142,6 +148,9 @@ class _Speaker:
         self._error: BaseException | None = None
         self._first_audio: float | None = None
         self._started = time.monotonic()
+        self._stopped = threading.Event()
+        #: Set once the device is open, so another thread can abort playback.
+        self._sink: playback.Sink | None = None
         self._play_thread = threading.Thread(target=self._play_loop, daemon=True)
         # Overwritten by the first response's Content-Type; config is only the
         # fallback for providers that don't declare a rate.
@@ -151,7 +160,27 @@ class _Speaker:
     def start(self) -> None:
         self._play_thread.start()
 
+    @property
+    def stopped(self) -> bool:
+        return self._stopped.is_set()
+
+    def stop(self) -> None:
+        """Cut the reply off mid-sentence. Called from the barge-in thread.
+
+        Aborting the sink is what silences the speaker; everything else here
+        just stops work that would otherwise carry on being paid for and
+        played -- sentences still being synthesised, and audio already queued
+        behind the one being spoken.
+        """
+        if self._stopped.is_set():
+            return
+        self._stopped.set()
+        if self._sink is not None:
+            self._sink.abort()
+
     def send(self, chunk: str) -> None:
+        if self._stopped.is_set():
+            return
         # Claim this sentence's position in the running order *before*
         # submitting, so playback order never depends on which request finishes
         # first.
@@ -175,6 +204,9 @@ class _Speaker:
             self._rate = rate
 
     def _synth_one(self, text: str, pcm_q: queue.Queue[bytes | None]) -> None:
+        if self._stopped.is_set():
+            pcm_q.put(None)
+            return
         try:
             for pcm in tts_mod.synthesize_stream(
                 self._client,
@@ -183,6 +215,9 @@ class _Speaker:
                 voice=self._config.tts.voice,
                 on_rate=self._note_rate,
             ):
+                if self._stopped.is_set():
+                    # Stop pulling audio nobody will hear.
+                    break
                 pcm_q.put(pcm)
         except OpenRouterError as e:
             self._error = e
@@ -207,15 +242,31 @@ class _Speaker:
                 self._config.audio.output_device, self._rate
             )
             write = stream_cm.__enter__()
+            # Publish the sink before the first write: stop() can arrive from
+            # the barge-in thread at any point once audio is audible.
+            self._sink = write
+            if self._stopped.is_set():
+                # Stopped in the moment between the check in stop() and this
+                # device opening. Nothing has been written yet, but the stream
+                # still has to be aborted or the exit below will drain it.
+                write.abort()
             self._first_audio = time.monotonic() - self._started
 
         try:
-            while True:
-                pcm_q = self._order.get()
+            while not self._stopped.is_set():
+                # Poll rather than block: a barge-in must not have to wait for
+                # a sentence that is still being synthesised to arrive first.
+                try:
+                    pcm_q = self._order.get(timeout=POLL_SEC)
+                except queue.Empty:
+                    continue
                 if pcm_q is None:
                     break
-                while True:
-                    pcm = pcm_q.get()
+                while not self._stopped.is_set():
+                    try:
+                        pcm = pcm_q.get(timeout=POLL_SEC)
+                    except queue.Empty:
+                        continue
                     if pcm is None:
                         break
                     if write is not None:
@@ -231,7 +282,7 @@ class _Speaker:
                         pending, pending_bytes = [], 0
 
             # Reply shorter than the pre-roll: play what we have.
-            if pending:
+            if pending and not self._stopped.is_set():
                 open_device()
                 for buffered in pending:
                     write(buffered)
@@ -240,28 +291,68 @@ class _Speaker:
             log.exception("playback crashed")
         finally:
             if stream_cm is not None:
+                if self._stopped.is_set() and self._sink is not None:
+                    # Belt and braces against the same race: exiting the
+                    # context manager closes the pipe and waits, which plays
+                    # out everything buffered -- 9.1s of it, measured. Abort
+                    # is idempotent, so doing it twice costs nothing.
+                    self._sink.abort()
                 stream_cm.__exit__(None, None, None)
+
+
+class Spoken(str):
+    """What Faethon actually said, plus whether it was cut off part-way.
+
+    A str subclass rather than a wrapper so every caller that compares,
+    formats or truth-tests the reply keeps working untouched.
+    """
+
+    interrupted: bool = False
+
+    def __new__(cls, text: str, interrupted: bool = False) -> "Spoken":
+        self = super().__new__(cls, text)
+        self.interrupted = interrupted
+        return self
 
 
 def speak_streaming(
     client: OpenRouterClient,
     config: Config,
     chunks: Iterable[str],
-) -> str:
-    """Speak chunks as they arrive. Returns everything that was said."""
+    *,
+    on_start: Callable[[_Speaker], None] | None = None,
+) -> Spoken:
+    """Speak chunks as they arrive. Returns everything that was said.
+
+    `on_start` is handed the speaker as soon as one exists, giving a caller
+    that is watching for barge-in something to stop.
+    """
     speaker = _Speaker(client, config)
     speaker.start()
+    if on_start is not None:
+        on_start(speaker)
 
     spoken: list[str] = []
     try:
         for chunk in chunks:
+            if speaker.stopped:
+                # Barge-in. Stop pulling from the model as well as the
+                # speaker: the rest of this reply is neither wanted nor free.
+                break
             if not chunk.strip():
                 continue
             spoken.append(chunk)
             speaker.send(chunk)
     finally:
         first = speaker.finish()
+        close = getattr(chunks, "close", None)
+        if close is not None:
+            # Unwinds the router's generator, which closes the HTTP response
+            # and records what was actually said. Without it an interrupted
+            # turn leaves no trace in memory, and Faethon would repeat the
+            # whole answer if asked again.
+            close()
 
     if spoken and first is not None:
         log.info("first audio in %.2fs (%d chunk(s))", first, len(spoken))
-    return " ".join(spoken)
+    return Spoken(" ".join(spoken), interrupted=speaker.stopped)

@@ -70,6 +70,36 @@ conversation:
   # ~8000 the pause after a reply starts to feel like a hang.
   follow_up_ms: 5000
 
+  # Say the wake word while Faethon is talking and it stops. Useful when the
+  # model answers a one-line question with a paragraph.
+  #
+  # This needs no echo cancellation, which is what usually makes barge-in hard.
+  # A wake-word model listens for one phrase rather than for speech in general,
+  # and Faethon never says its own wake word: playing a 30s reply through the
+  # speaker and scoring the recorded microphone gave a median of 0.0000 and a
+  # peak of 0.0014 against a threshold of 0.7, with no false trigger.
+  #
+  # The cost is one inference per 80ms frame while speaking -- about 16% of one
+  # core, and nothing when Faethon is quiet.
+  barge_in: true
+
+  # Wake score needed to interrupt. Far lower than wake.threshold on purpose:
+  # Faethon's own voice does not trigger the detector, but it does mask yours.
+  # Playing a reply and a real recording of the wake word through the speaker
+  # together, at the equal loudness they were measured to have at the mic:
+  #
+  #   wake word, quiet room             0.9999
+  #   wake word, over Faethon talking   0.3681   <- what this has to catch
+  #   Faethon talking, no wake word     0.0002   <- what it must not catch
+  #
+  # At wake.threshold (0.7) barge-in never fires at all. 0.1 sits three and a
+  # half times under the masked phrase and five hundred times over the floor.
+  #
+  # Raise it if replies cut themselves off; lower it if you have to shout. If
+  # you have to shout a lot, turn the speaker down -- detection falls off
+  # sharply once Faethon is louder than you are at the microphone.
+  barge_in_threshold: 0.1
+
 models:
   # Turbo has a distilled decoder: markedly faster and 2.25x cheaper, with a
   # small accuracy cost that doesn't show up on short English commands.

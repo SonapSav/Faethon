@@ -94,31 +94,48 @@ class Router:
         )
 
         said: list[str] = []
-        try:
-            for chunk in sentence_chunks(reply):
-                said.append(chunk)
-                yield chunk
-        except OpenRouterError as e:
-            log.error("llm stream failed: %s", e)
-            if not said:
-                spoken = "Sorry, I couldn't reach my brain just then."
-                yield spoken
+        recorded = False
+
+        def remember(spoken: str) -> None:
+            """Record this exchange once, whichever way the generator ends."""
+            nonlocal recorded
+            if not recorded:
+                recorded = True
                 self.memory.add(text, spoken)
-                return
 
-        # No content streamed: the model chose a tool instead.
-        for call in reply.tool_calls:
-            log.info("tool -> %s(%s)", call.name, call.arguments)
-            result = self._run(call.name, call.arguments)
-            if result:
-                said.append(result)
-                yield result
+        try:
+            try:
+                for chunk in sentence_chunks(reply):
+                    said.append(chunk)
+                    yield chunk
+            except OpenRouterError as e:
+                log.error("llm stream failed: %s", e)
+                if not said:
+                    spoken = "Sorry, I couldn't reach my brain just then."
+                    yield spoken
+                    remember(spoken)
+                    return
 
-        spoken = " ".join(said)
-        if not spoken:
-            spoken = "Sorry, I didn't catch that."
-            yield spoken
-        self.memory.add(text, spoken)
+            # No content streamed: the model chose a tool instead.
+            for call in reply.tool_calls:
+                log.info("tool -> %s(%s)", call.name, call.arguments)
+                result = self._run(call.name, call.arguments)
+                if result:
+                    said.append(result)
+                    yield result
+
+            spoken = " ".join(said)
+            if not spoken:
+                spoken = "Sorry, I didn't catch that."
+                yield spoken
+            remember(spoken)
+        finally:
+            # Barge-in closes this generator part-way through. Record what was
+            # said before the interruption: dropping it entirely would leave
+            # the next turn's context claiming Faethon never answered, so
+            # "what did you just say?" would draw a blank and asking again
+            # would replay the whole reply from the top.
+            remember(" ".join(said))
 
     def _local_skill_match(self, text: str) -> str | None:
         """The regex path. None means "no skill matched, try the LLM"."""

@@ -64,6 +64,15 @@ class ConversationConfig(BaseModel):
     #: speak, while this one is usually spent on silence, and every millisecond
     #: of it is a millisecond the mic stays live after Faethon stops talking.
     follow_up_ms: int = 5000
+    #: Let the wake word cut a reply off mid-sentence. Costs one wake-model
+    #: inference per 80ms frame while Faethon is speaking (~16% of one core),
+    #: and nothing at all when it is quiet.
+    barge_in: bool = True
+    #: Wake score needed to interrupt, which has to be far lower than the
+    #: quiet-room threshold: Faethon's own voice is masking yours. Measured
+    #: through the speaker and mic at equal loudness, the wake word scored
+    #: 0.368 while Faethon talking over it scored 0.0002.
+    barge_in_threshold: float = Field(0.1, gt=0.0, le=1.0)
 
 
 class ModelsConfig(BaseModel):

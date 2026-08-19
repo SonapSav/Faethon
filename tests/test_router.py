@@ -153,3 +153,65 @@ def test_history_is_sent_on_the_next_llm_call(router):
 def test_empty_transcript_is_ignored(router):
     assert router.handle("   ") == ""
     assert router.calls == []
+
+
+# -- interrupted replies -----------------------------------------------------
+
+
+class FakeStreamingReply:
+    """Stands in for a streamed completion: deltas in, no tool calls."""
+
+    tool_calls: list = []
+
+    def __iter__(self):
+        yield "The first president was George Washington. "
+        yield "He served two terms. "
+        yield "He was born in Virginia."
+
+
+def test_an_interrupted_reply_is_still_remembered(router, monkeypatch):
+    """Barge-in closes the generator part-way through.
+
+    Dropping the exchange would leave the next turn's context claiming Faethon
+    never answered: "what did you just say?" draws a blank, and asking the same
+    question again replays the whole reply from the top.
+    """
+    monkeypatch.setattr(
+        "faethon.router.llm_mod.complete_streaming",
+        lambda *a, **kw: FakeStreamingReply(),
+    )
+
+    stream = router.handle_streaming("tell me about the presidents")
+    first = next(stream)
+    stream.close()
+
+    assert len(router.memory) == 1, "interrupted exchange left no trace"
+    history = router.memory.messages("sys", "and the second?")
+    assert history[1]["content"] == "tell me about the presidents"
+    assert history[2]["content"] == first, "should hold what was said, not the whole reply"
+
+
+def test_a_reply_heard_in_full_is_remembered_in_full(router, monkeypatch):
+    monkeypatch.setattr(
+        "faethon.router.llm_mod.complete_streaming",
+        lambda *a, **kw: FakeStreamingReply(),
+    )
+
+    said = list(router.handle_streaming("tell me about the presidents"))
+
+    history = router.memory.messages("sys", "next")
+    assert history[2]["content"] == " ".join(said)
+    assert "Virginia" in history[2]["content"]
+
+
+def test_an_exchange_is_recorded_only_once(router, monkeypatch):
+    """The finally that catches barge-in must not double-record a normal turn."""
+    monkeypatch.setattr(
+        "faethon.router.llm_mod.complete_streaming",
+        lambda *a, **kw: FakeStreamingReply(),
+    )
+
+    stream = router.handle_streaming("tell me about the presidents")
+    list(stream)
+    stream.close()
+    assert len(router.memory) == 1
