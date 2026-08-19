@@ -221,6 +221,13 @@ scale is 0 to 10, where 0 is muted and 10 is the mixer's maximum. Also
 understands "louder", "quieter", "turn it up", "mute", "set the volume to 8",
 and "what's the volume".
 
+Each change is spoken back as a percentage of the dial — one level is one
+tenth, so level 7 announces **"Volume is set to 70%."** and level 0 says
+**"Volume is set to 0%, muted."**, since 0% alone leaves it unclear whether the
+speaker is silent or merely turned right down. The literal `%` is safe: Fish
+Audio pronounces it, measured at 2.04s of audio against 2.09s for the word
+spelled out and 1.72s with the sign removed.
+
 The mapping is the part worth knowing about. ALSA's PCM control on a Pi is
 scaled in **dB**, and the percentage `amixer` prints is a linear position in
 that range rather than a loudness — so the obvious implementation, level 5

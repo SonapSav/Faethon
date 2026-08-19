@@ -145,14 +145,26 @@ def test_zero_mutes_rather_than_setting_a_quiet_level(skill):
 
 def test_volume_up_ascends_by_one(skill):
     skill._apply(5)
-    assert say(skill, "volume up") == "Volume 6."
-    assert say(skill, "volume up") == "Volume 7."
+    assert say(skill, "volume up") == "Volume is set to 60%."
+    assert say(skill, "volume up") == "Volume is set to 70%."
 
 
 def test_volume_down_descends_by_one(skill):
     skill._apply(5)
-    assert say(skill, "volume down") == "Volume 4."
-    assert say(skill, "volume down") == "Volume 3."
+    assert say(skill, "volume down") == "Volume is set to 40%."
+    assert say(skill, "volume down") == "Volume is set to 30%."
+
+
+def test_the_level_is_spoken_as_a_percentage_of_the_dial(skill):
+    """One level is one tenth of the dial, so 7 is announced as 70%.
+
+    The raw level would be ambiguous aloud -- "volume seven" gives no sense of
+    how much further it goes -- and the percentage matches how the steps were
+    specified.
+    """
+    for level, expected in [(1, "10%"), (5, "50%"), (10, "100%")]:
+        skill._apply(level)
+        assert expected in say(skill, "what's the volume")
 
 
 @pytest.mark.parametrize("phrase", [
@@ -160,7 +172,7 @@ def test_volume_down_descends_by_one(skill):
 ])
 def test_phrasings_that_mean_louder(skill, phrase):
     skill._apply(5)
-    assert say(skill, phrase) == "Volume 6."
+    assert say(skill, phrase) == "Volume is set to 60%."
 
 
 @pytest.mark.parametrize("phrase", [
@@ -168,24 +180,29 @@ def test_phrasings_that_mean_louder(skill, phrase):
 ])
 def test_phrasings_that_mean_quieter(skill, phrase):
     skill._apply(5)
-    assert say(skill, phrase) == "Volume 4."
+    assert say(skill, phrase) == "Volume is set to 40%."
 
 
 def test_it_stops_at_the_top(skill):
     skill._apply(MAX_LEVEL)
-    assert "as loud as it goes" in say(skill, "volume up")
+    assert say(skill, "volume up") == "Volume is already at 100%."
     assert skill._state()[0] == pytest.approx(4.0), "level should not have moved"
 
 
 def test_it_stops_at_the_bottom(skill):
     skill._apply(MIN_LEVEL)
-    assert "already muted" in say(skill, "volume down")
+    assert say(skill, "volume down") == "Volume is already at 0%, muted."
+
+
+def test_muting_says_so_as_well_as_the_number(skill):
+    """0% alone leaves it unclear whether the speaker is silent or just low."""
+    assert say(skill, "mute") == "Volume is set to 0%, muted."
 
 
 def test_stepping_up_from_muted_unmutes(skill):
     """Otherwise "volume up" on a muted speaker changes a number and stays silent."""
     skill._apply(MIN_LEVEL)
-    assert say(skill, "volume up") == "Volume 1."
+    assert say(skill, "volume up") == "Volume is set to 10%."
     assert skill._state()[2] is False
 
 
@@ -199,21 +216,21 @@ def test_unmuting_does_not_land_on_silence(skill):
 
 
 def test_an_absolute_level_can_be_set(skill):
-    assert say(skill, "set the volume to 8") == "Volume 8."
-    assert say(skill, "volume 3") == "Volume 3."
+    assert say(skill, "set the volume to 8") == "Volume is set to 80%."
+    assert say(skill, "volume 3") == "Volume is set to 30%."
 
 
 def test_asking_does_not_change_anything(skill):
     skill._apply(6)
     before = skill._state()[0]
-    assert say(skill, "what's the volume") == "The volume is 6."
+    assert say(skill, "what's the volume") == "Volume is set to 60%."
     assert skill._state()[0] == before
 
 
 def test_out_of_range_is_clamped_not_rejected(skill):
     """The model can pass anything through the tool-calling path."""
-    assert skill.run(level=99) == "Volume ten, that's maximum."
-    assert skill.run(level=-4) == "Muted."
+    assert skill.run(level=99) == "Volume is set to 100%."
+    assert skill.run(level=-4) == "Volume is set to 0%, muted."
 
 
 def test_a_missing_mixer_explains_itself(monkeypatch):

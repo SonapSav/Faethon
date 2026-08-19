@@ -39,6 +39,11 @@ from .base import Skill
 log = logging.getLogger(__name__)
 
 MIN_LEVEL, MAX_LEVEL = 0, 10
+#: Spoken as a percentage: one level is one tenth of the dial, so 7 -> "70%".
+#: The literal "%" is deliberate -- Fish Audio S1 pronounces it, measured at
+#: 2.04s of audio against 2.09s for the word spelled out and 1.72s with the
+#: sign removed, so it is being said rather than skipped.
+PERCENT_PER_LEVEL = 10
 #: Levels 1..MAX_LEVEL span this many dB below the control's maximum.
 USABLE_RANGE_DB = 34.0
 
@@ -56,6 +61,21 @@ def _amixer(*args: str, card: str | None = None) -> str:
     if out.returncode != 0:
         raise RuntimeError(out.stderr.strip() or f"amixer failed: {' '.join(cmd)}")
     return out.stdout
+
+
+def _percent(level: int) -> str:
+    return f"{level * PERCENT_PER_LEVEL}%"
+
+
+def _spoken(level: int) -> str:
+    """What Faethon says after a change, and when asked.
+
+    Muting says both, because "0%" alone leaves it ambiguous whether the
+    speaker is silent or merely turned all the way down.
+    """
+    if level <= MIN_LEVEL:
+        return f"Volume is set to {_percent(MIN_LEVEL)}, muted."
+    return f"Volume is set to {_percent(level)}."
 
 
 def _find_control() -> tuple[str, str] | None:
@@ -227,25 +247,19 @@ class VolumeSkill(Skill):
                 return self._describe(current)
 
             if target > MAX_LEVEL:
-                return "That's already as loud as it goes."
+                return f"Volume is already at {_percent(MAX_LEVEL)}."
             if target < MIN_LEVEL:
-                return "It's already muted."
+                return f"Volume is already at {_percent(MIN_LEVEL)}, muted."
 
             self._apply(target)
         except (RuntimeError, OSError, subprocess.SubprocessError, IndexError) as e:
             log.error("volume: %s", e)
             return "Sorry, I couldn't change the volume."
 
-        if target == MIN_LEVEL:
-            return "Muted."
-        if target == MAX_LEVEL:
-            return "Volume ten, that's maximum."
-        return f"Volume {target}."
+        return _spoken(target)
 
     def _describe(self, level: int) -> str:
-        if level == MIN_LEVEL:
-            return "It's muted."
-        return f"The volume is {level}."
+        return _spoken(level)
 
 
 SKILL = VolumeSkill()
