@@ -31,6 +31,11 @@ class Skill(ABC):
     patterns: ClassVar[list[str]] = []
     #: JSON Schema for the tool-calling parameters.
     parameters: ClassVar[dict[str, Any]] = {"type": "object", "properties": {}}
+    #: Whether running this skill wipes conversational memory. The router does
+    #: the wiping -- skills hold no references to it -- and also drops the
+    #: exchange that asked for it, so "clear the buffer" does not become the
+    #: first thing in the fresh buffer.
+    clears_memory: ClassVar[bool] = False
 
     def __init__(self) -> None:
         self._compiled = [re.compile(p, re.IGNORECASE) for p in self.patterns]

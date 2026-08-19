@@ -215,3 +215,19 @@ def test_an_exchange_is_recorded_only_once(router, monkeypatch):
     list(stream)
     stream.close()
     assert len(router.memory) == 1
+
+
+def test_router_uses_the_memory_it_was_given(config):
+    """Memory defines __len__, so a fresh one is falsy.
+
+    Defaulting it with `or` therefore swapped the caller's memory for a private
+    one in the normal case -- a fresh Memory is always empty -- leaving Faethon
+    and its router holding different objects.
+    """
+    mem = Memory(5)
+    assert not mem, "precondition: an empty Memory is falsy"
+    r = Router(config, client=object(), registry=Registry([]), memory=mem)
+    assert r.memory is mem
+
+    r.memory.add("a", "b")
+    assert len(mem) == 1

@@ -265,6 +265,25 @@ devices are re-plugged. If no playback control is found the skill reports
 itself unavailable, so it's hidden from the LLM and explains itself out loud
 rather than failing silently.
 
+## Clearing the conversation
+
+Faethon keeps the last ten exchanges so pronouns carry across turns. Say
+**"Hey Rhasspy, clear the buffer"** to drop them — also "clear the memory",
+"forget the conversation", "start a new conversation" — and it answers
+**"Memory is cleared."**
+
+The wipe includes the exchange that asked for it, so the buffer really is
+empty rather than holding "clear the buffer" as its first entry. That is the
+whole subtlety: the router records every turn *after* the skill has run, so a
+skill that clears memory has to suppress its own recording too. Skills declare
+`clears_memory = True` and the router does both — skills hold no reference to
+memory themselves.
+
+The buffer costs about 3–5 kB of RAM whatever you do with it. What it actually
+costs is prompt size: ten turns adds roughly 250–700 tokens to every request,
+which is latency on the slowest leg. Clearing it is a way to make Faethon
+quicker as well as more private.
+
 ## Writing a skill
 
 Drop a file in `src/faethon/skills/`. The registry finds it — no imports to
@@ -457,6 +476,7 @@ while still correcting itself when genuinely wrong (7 × 8).
   that keeps producing speech Whisper will transcribe — a television in the same
   room — can hold one open indefinitely, and every turn is a paid API call.
 - **Memory is 10 turns and RAM-only.** It forgets on restart, deliberately.
+  Say **"clear the buffer"** to forget it sooner.
 - **One wake word at a time.**
 
 ## Tests

@@ -39,18 +39,28 @@ class Router:
         self.config = config
         self.client = client
         self.registry = registry
-        self.memory = memory or Memory(config.llm.history_turns)
+        # `is not None`, not `or`: Memory defines __len__, so an empty one is
+        # falsy and `or` would silently swap the caller's memory for a private
+        # one. Faethon passes a fresh -- therefore empty -- Memory in, so that
+        # is the normal case, not the edge case.
+        self.memory = memory if memory is not None else Memory(
+            config.llm.history_turns
+        )
+        #: Set for the duration of one turn when a skill wipes memory, so the
+        #: exchange that asked for the wipe is not then recorded into it.
+        self._skip_record = False
 
     def handle(self, text: str) -> str:
         """Return what Faethon should say in response to `text`."""
         if not text.strip():
             return ""
+        self._skip_record = False
 
         spoken = self._local_skill_match(text)
         if spoken is None:
             spoken = self._llm_fallback(text)
 
-        self.memory.add(text, spoken)
+        self._record(text, spoken)
         return spoken
 
     def handle_streaming(self, text: str) -> Iterator[str]:
@@ -64,6 +74,10 @@ class Router:
         """
         if not text.strip():
             return
+        # Reset per turn rather than after use: a barge-in can abandon this
+        # generator before the recording step, and a flag left set would
+        # silently swallow the next turn instead.
+        self._skip_record = False
 
         hit = self.registry.match(text)
         if hit is not None:
@@ -76,7 +90,7 @@ class Router:
                 spoken = self._run(skill.name, params)
             if spoken:
                 yield spoken
-            self.memory.add(text, spoken)
+            self._record(text, spoken)
             return
 
         from .speech import sentence_chunks  # local: avoids a circular import
@@ -101,7 +115,7 @@ class Router:
             nonlocal recorded
             if not recorded:
                 recorded = True
-                self.memory.add(text, spoken)
+                self._record(text, spoken)
 
         try:
             try:
@@ -189,7 +203,7 @@ class Router:
         if not skill.available:
             return skill.unavailable_reason
         try:
-            return skill.run(**params)
+            spoken = skill.run(**params)
         except TypeError as e:
             # Wrong or unexpected arguments -- a bad tool call, not a crash.
             log.warning("skill %s rejected params %s: %s", name, params, e)
@@ -197,3 +211,21 @@ class Router:
         except Exception:
             log.exception("skill %s raised", name)
             return f"Something went wrong running {name.replace('_', ' ')}."
+
+        if skill.clears_memory:
+            # Now, not at the end of the turn: a barge-in can abandon this
+            # exchange part-way, and "cleared, mostly" is not a useful state.
+            self.memory.clear()
+            self._skip_record = True
+            log.info("memory cleared by %s", name)
+        return spoken
+
+    def _record(self, text: str, spoken: str) -> None:
+        """Add the exchange to memory, unless a skill just wiped it.
+
+        The wipe has to take the exchange that caused it as well, or the first
+        entry in the empty buffer is the request to empty it.
+        """
+        if self._skip_record:
+            return
+        self.memory.add(text, spoken)
