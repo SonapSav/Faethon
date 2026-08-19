@@ -242,7 +242,7 @@ The knobs, in the order they're worth reaching for:
 | Closes the conversation too fast, or holds the mic open too long after a reply | `conversation.follow_up_ms`. |
 | Gives up in a noisy room | `utterance.speech_onset_ms` — sustained voice needed before Faethon believes you've started. |
 | `stt` line is slow | `models.stt` — `whisper-large-v3-turbo` is the fast default; plain `whisper-large-v3` is more accurate and slower. |
-| Slow to start talking | `llm.max_tokens` — shorter replies finish sooner. Also try a different model; provider latency varies a lot more than the Pi does. |
+| Slow to start talking | `llm.provider_sort` first (see below), then `llm.max_tokens` — shorter replies finish sooner. Provider latency varies a lot more than the Pi does. |
 | Choppy or oddly-paced speech | `MIN_CHARS` / `FIRST_MIN_CHARS` in `src/faethon/speech.py` — bigger chunks sound smoother but start later. |
 
 Almost none of the delay is the Pi. Wake-word inference is 13ms per 80ms frame
@@ -301,6 +301,47 @@ reasoning: {"max_tokens": 0}      # WRONG - still burns the tokens
 
 Turn reasoning on only if you also raise `max_tokens` a long way, and accept
 that a reply you have to wait several seconds for is a poor fit for speech.
+
+### Which provider serves it
+
+OpenRouter serves this model from eighteen providers and, left alone, routes
+cheapest-first. That optimises the wrong thing: a spoken reply is late by
+however long the provider takes to produce its first token, and the cheap ones
+are erratic — ten identical calls on the default routing all landed on
+GMICloud and ranged 2.09s to 7.22s to first token.
+
+```yaml
+llm:
+  provider_sort: "latency"   # "" | "price" | "latency" | "throughput"
+```
+
+Five trials each, with the real system prompt and tool schemas:
+
+| `provider_sort` | median ttft | worst | who served it |
+|---|---|---|---|
+| `""` (cheapest-first) | 2.76s | 5.22s | GMICloud, StreamLake |
+| **`"latency"`** | **1.50s** | **2.94s** | CoreWeave, GMICloud |
+| `"throughput"` | 0.81s | 11.36s | Alibaba |
+
+`"throughput"` has the best median and by far the worst tail, and the tail is
+the half people notice — a reply that is occasionally eleven seconds late is
+worse than one reliably at a second and a half.
+
+It costs a little more, since routing on anything but price means not always
+taking the cheapest of the eighteen (they span $0.068–$0.44 per M input against
+GMICloud's $0.084). On a bill of pennies a month that is not the binding
+constraint. Set it back to `""` for cheapest-first.
+
+`faethon-probe llm` and `faethon-probe bench` send the same routing as the
+assistant does, so their numbers stay comparable with what you hear.
+
+It also **folds under pressure** unless told not to. Out of the box it would
+answer "King Charles the Third" correctly, then on being told "that's wrong"
+reply *"You're right — the United Kingdom doesn't have a king."* Confidently
+wrong on the second try is worse than useless when there's no transcript to
+scroll back through. The system prompt in `config.yaml` therefore tells it to
+reconsider honestly and hold its ground when it was right — measured 4/4 held,
+while still correcting itself when genuinely wrong (7 × 8).
 
 ## Known limits
 

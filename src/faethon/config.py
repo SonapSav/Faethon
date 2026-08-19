@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -88,6 +89,10 @@ class LLMConfig(BaseModel):
     #: come out of max_tokens, and on a spoken-reply budget they can consume
     #: the lot and leave nothing to say. Only turn on with a large max_tokens.
     reasoning: bool = False
+    #: How OpenRouter should choose between the providers serving the model.
+    #: Empty leaves its default, which is cheapest-first and erratic. A typo
+    #: here would be forwarded and silently ignored, hence the closed set.
+    provider_sort: Literal["", "price", "latency", "throughput"] = ""
 
 
 class TTSConfig(BaseModel):

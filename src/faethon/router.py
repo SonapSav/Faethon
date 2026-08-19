@@ -90,6 +90,7 @@ class Router:
             temperature=self.config.llm.temperature,
             tools=self.registry.tool_schemas() or None,
             reasoning=self.config.llm.reasoning,
+            provider_sort=self.config.llm.provider_sort,
         )
 
         said: list[str] = []
@@ -146,6 +147,7 @@ class Router:
                 temperature=self.config.llm.temperature,
                 tools=self.registry.tool_schemas() or None,
                 reasoning=self.config.llm.reasoning,
+                provider_sort=self.config.llm.provider_sort,
             )
         except OpenRouterError as e:
             log.error("llm call failed: %s", e)

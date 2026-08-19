@@ -10,6 +10,10 @@ regression here would be easy to miss by hand.
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
+from faethon.config import LLMConfig
 from faethon.providers.llm import _payload
 
 BASE = dict(
@@ -57,3 +61,41 @@ def test_core_parameters_are_passed_through():
     assert payload["model"] == "deepseek/deepseek-v4-flash"
     assert payload["max_tokens"] == 100
     assert payload["temperature"] == 0.7
+
+
+# -- provider routing --------------------------------------------------------
+# OpenRouter serves this model from eighteen providers and defaults to
+# cheapest-first, which optimises the wrong thing for speech: the reply is late
+# by however long the provider takes to produce its first token.
+
+
+def test_no_provider_routing_is_sent_by_default():
+    """Absent the knob, OpenRouter's own default must be left alone.
+
+    Sending {"sort": ""} is not the same as sending nothing.
+    """
+    assert "provider" not in _payload(**BASE)
+    assert "provider" not in _payload(**BASE, provider_sort="")
+
+
+def test_provider_sort_is_forwarded():
+    assert _payload(**BASE, provider_sort="latency")["provider"] == {"sort": "latency"}
+
+
+def test_provider_sort_does_not_disturb_the_reasoning_guard():
+    """The two are independent; routing must not resurrect thinking tokens."""
+    payload = _payload(**BASE, provider_sort="latency")
+    assert payload["reasoning"] == {"enabled": False}
+    assert payload["max_tokens"] == 100
+
+
+def test_config_rejects_a_misspelled_provider_sort():
+    """OpenRouter ignores an unknown sort silently, so catch it at load.
+
+    A typo would otherwise look like it worked while quietly leaving routing on
+    cheapest-first, which is the slow default this exists to escape.
+    """
+    with pytest.raises(ValidationError):
+        LLMConfig(system_prompt="x", provider_sort="lattency")
+
+    assert LLMConfig(system_prompt="x", provider_sort="latency").provider_sort == "latency"

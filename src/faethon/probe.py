@@ -64,6 +64,7 @@ def cmd_llm(cfg, client, args) -> None:
         model=cfg.models.llm,
         max_tokens=cfg.llm.max_tokens,
         temperature=cfg.llm.temperature,
+        provider_sort=cfg.llm.provider_sort,
     )
     print(f"\n  [{time.monotonic() - t0:.2f}s] {reply.text}")
 
@@ -114,6 +115,7 @@ def cmd_say(cfg, client, args) -> None:
         model=cfg.models.llm,
         max_tokens=cfg.llm.max_tokens,
         temperature=cfg.llm.temperature,
+        provider_sort=cfg.llm.provider_sort,
     )
 
     def timed():
@@ -146,6 +148,7 @@ def cmd_bench(cfg, client, args) -> None:
     reply = llm_mod.complete(
         client, messages, model=cfg.models.llm,
         max_tokens=cfg.llm.max_tokens, temperature=cfg.llm.temperature,
+        provider_sort=cfg.llm.provider_sort,
     )
     t_llm = time.monotonic() - t0
     first_buffered = None
@@ -165,6 +168,7 @@ def cmd_bench(cfg, client, args) -> None:
     streaming = llm_stream.complete_streaming(
         client, messages, model=cfg.models.llm,
         max_tokens=cfg.llm.max_tokens, temperature=cfg.llm.temperature,
+        provider_sort=cfg.llm.provider_sort,
     )
     speak_streaming(client, cfg, sentence_chunks(streaming))
     streamed_total = time.monotonic() - t0
@@ -202,6 +206,7 @@ def cmd_chain(cfg, client, args) -> None:
         model=cfg.models.llm,
         max_tokens=cfg.llm.max_tokens,
         temperature=cfg.llm.temperature,
+        provider_sort=cfg.llm.provider_sort,
     )
     spoken = speak_streaming(client, cfg, sentence_chunks(streaming))
     t_reply = time.monotonic() - t1

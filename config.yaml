@@ -116,6 +116,27 @@ llm:
   # reply -- Faethon says nothing. Measured: 99 of 100 tokens on one arithmetic
   # question. Leave this off unless you also raise max_tokens a long way.
   reasoning: false
+
+  # How OpenRouter picks between the providers serving this model. Its default
+  # is cheapest-first, which is the wrong objective for speech: the reply is
+  # late by however long the provider takes to produce its first token, and the
+  # cheap ones are erratic. Ten identical calls on the default routing all went
+  # to GMICloud and ranged 2.09-7.22s to first token.
+  #
+  # Measured 2026-08-19, five trials each, real system prompt and tool schemas:
+  #
+  #   ""           median ttft 2.76s, worst 5.22s   (GMICloud, StreamLake)
+  #   "latency"    median ttft 1.50s, worst 2.94s   (CoreWeave, GMICloud)
+  #   "throughput" median ttft 0.81s, worst 11.36s  (Alibaba)
+  #
+  # "throughput" has the best median and by far the worst tail. The tail is the
+  # half people notice: a reply that is occasionally eleven seconds late is
+  # worse than one reliably at a second and a half. Hence "latency".
+  #
+  # Costs a little more -- routing off price means not always taking the
+  # cheapest of the eighteen providers, which span $0.068-$0.44 per M input
+  # against GMICloud's $0.084. Set to "" to go back to cheapest-first.
+  provider_sort: "latency"
   # The "stand your ground" clause is not decoration. Without it the model
   # folds the moment it is challenged -- it would answer "King Charles the
   # Third" correctly, then on being told "that's wrong" reply "you're right,

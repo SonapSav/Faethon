@@ -62,6 +62,7 @@ def _payload(
     temperature: float,
     tools: list[dict[str, Any]] | None,
     reasoning: bool = False,
+    provider_sort: str = "",
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": model,
@@ -83,6 +84,22 @@ def _payload(
         # Only "enabled": false actually stops it. "exclude": true and
         # "max_tokens": 0 merely hide the reasoning while still paying for it.
         payload["reasoning"] = {"enabled": False}
+
+    if provider_sort:
+        # OpenRouter serves this model from many providers and defaults to
+        # cheapest-first, which is the wrong objective for speech: the reply
+        # is late by however long the provider takes to produce its first
+        # token, and the cheap ones are erratic. Measured over five trials
+        # each, with this system prompt and tool schemas:
+        #
+        #   default      median ttft 2.76s, worst 5.22s
+        #   latency      median ttft 1.50s, worst 2.94s
+        #   throughput   median ttft 0.81s, worst 11.36s
+        #
+        # "throughput" wins on the median and loses badly on the tail, which
+        # is the half that gets noticed -- a reply that is occasionally 11s
+        # late is worse than one reliably at 1.5s.
+        payload["provider"] = {"sort": provider_sort}
     return payload
 
 
@@ -194,8 +211,11 @@ def complete_streaming(
     temperature: float,
     tools: list[dict[str, Any]] | None = None,
     reasoning: bool = False,
+    provider_sort: str = "",
 ) -> StreamingReply:
-    payload = _payload(messages, model, max_tokens, temperature, tools, reasoning)
+    payload = _payload(
+        messages, model, max_tokens, temperature, tools, reasoning, provider_sort
+    )
     payload["stream"] = True
     # Without this the streamed response carries no cost information at all.
     payload["stream_options"] = {"include_usage": True}
@@ -211,10 +231,13 @@ def complete(
     temperature: float,
     tools: list[dict[str, Any]] | None = None,
     reasoning: bool = False,
+    provider_sort: str = "",
 ) -> LLMReply:
     data = client.post_json(
         "/chat/completions",
-        _payload(messages, model, max_tokens, temperature, tools, reasoning),
+        _payload(
+            messages, model, max_tokens, temperature, tools, reasoning, provider_sort
+        ),
     )
     choices = data.get("choices") or []
     if not choices:
