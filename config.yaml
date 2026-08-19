@@ -56,6 +56,20 @@ utterance:
   min_ms: 400               # shorter than this is treated as a false start
   max_ms: 15000             # hard cap so a stuck stream can't record forever
 
+conversation:
+  # Keep listening after each reply, so a back-and-forth only needs the wake
+  # word once. A rising chime opens the window, a falling one closes it.
+  follow_up: true
+
+  # How long that window stays open with nobody speaking. This is the only
+  # period when the mic is live without anyone having deliberately triggered
+  # it, so it is a privacy setting as much as a latency one -- and it is spent
+  # in full, as silence, at the end of every conversation.
+  #
+  # Below ~3000 it clips people who are still deciding what to ask next; above
+  # ~8000 the pause after a reply starts to feel like a hang.
+  follow_up_ms: 5000
+
 models:
   # Turbo has a distilled decoder: markedly faster and 2.25x cheaper, with a
   # small accuracy cost that doesn't show up on short English commands.

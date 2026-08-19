@@ -150,3 +150,36 @@ def test_partial_frames_are_carried_over():
     assert len(rec._pending) == (800 - 640) * 2
     rec.feed(half)
     assert rec._elapsed_ms == 100
+
+
+# -- per-recording start timeout ---------------------------------------------
+# The wake-word window and the post-reply follow-up window are different waits
+# through the same state machine, so the budget is set per reset(), not once.
+
+
+def test_reset_can_shorten_the_wait_for_this_recording_only():
+    rec = make(start_timeout_ms=5000)
+    rec.reset(1000)
+    status, ms = run(rec, [SILENCE] * 100)
+    assert status is Status.NO_SPEECH
+    assert 1000 <= ms <= 1100, f"gave up at {ms}ms, expected ~1000ms"
+
+    # Back to the configured budget when nothing is asked for.
+    rec.reset()
+    status, ms = run(rec, [SILENCE] * 100)
+    assert status is Status.NO_SPEECH
+    assert 5000 <= ms <= 5100, f"gave up at {ms}ms, expected ~5000ms"
+
+
+def test_a_short_window_still_lets_a_started_sentence_finish():
+    """The follow-up budget is for starting to speak, not for speaking.
+
+    Someone who answers within the window must not be cut off at 5s just
+    because the window that let them in was 5s long.
+    """
+    rec = make(start_timeout_ms=5000)
+    rec.reset(1000)
+    frames = [SILENCE] * 5 + [voiced()] * 100 + [SILENCE] * 10
+    status, _ = run(rec, frames)
+    assert status is Status.DONE
+    assert rec.result(status).usable

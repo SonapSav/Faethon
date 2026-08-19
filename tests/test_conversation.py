@@ -1,0 +1,157 @@
+"""Multi-turn conversation: who has to say the wake word, and when.
+
+Only the first turn of a conversation is opened by the wake word. Every turn
+after it is opened by the follow-up window, and silence through that window
+ends the conversation.
+
+No audio hardware and no network: `_handle_turn` is stubbed, so what's under
+test here is purely the loop around it -- which chime plays when, which
+listening budget each turn gets, and whether Faethon's own voice is dropped
+from the mic before it listens again.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from faethon.__main__ import ACK_SOUND, CLOSE_SOUND, Faethon
+from faethon.config import load_config
+
+
+class FakeStream:
+    """Stands in for a capture stream. Records drains against the event log."""
+
+    def __init__(self, log: list) -> None:
+        self._log = log
+
+    def __call__(self) -> bytes:
+        raise AssertionError("_converse must not read frames itself")
+
+    def drain(self) -> int:
+        self._log.append(("drain",))
+        return 32000
+
+
+@pytest.fixture
+def rig(monkeypatch):
+    """A Faethon whose turns are scripted, with every chime and drain logged."""
+    events: list = []
+
+    def fake_play_async(path, device):
+        events.append(("chime", path.name))
+
+    def fake_play(path, device):
+        events.append(("chime", path.name))
+
+    monkeypatch.setattr("faethon.__main__.playback.play_wav_async", fake_play_async)
+    monkeypatch.setattr("faethon.__main__.playback.play_wav", fake_play)
+
+    class Rig:
+        def __init__(self) -> None:
+            # Built without __init__: a real one loads the wake model and opens
+            # an API client, neither of which this loop touches.
+            self.faethon = Faethon.__new__(Faethon)
+            self.faethon.config = load_config()
+            self.faethon._running = True
+            self.events = events
+
+        def script(self, replies: list[bool]) -> None:
+            """Queue what each turn returns, then run the conversation."""
+            remaining = list(replies)
+
+            def fake_turn(stream, start_timeout_ms=None):
+                events.append(("turn", start_timeout_ms))
+                if not remaining:
+                    raise AssertionError("more turns than the script allowed")
+                return remaining.pop(0)
+
+            self.faethon._handle_turn = fake_turn
+            self.faethon._converse(FakeStream(events))
+
+        @property
+        def chimes(self) -> list[str]:
+            return [name for kind, *rest in self.events
+                    if kind == "chime" for name in rest]
+
+        @property
+        def windows(self) -> list:
+            return [w for kind, *rest in self.events
+                    if kind == "turn" for w in rest]
+
+    return Rig()
+
+
+def test_a_reply_opens_another_turn_without_the_wake_word(rig):
+    """Two answered turns then silence: three turns off one wake word."""
+    rig.script([True, True, False])
+    assert rig.windows == [None, 5000, 5000]
+
+
+def test_first_turn_uses_the_wake_budget_and_the_rest_the_follow_up(rig):
+    """None means the recorder's configured start_timeout_ms.
+
+    The two budgets are separate on purpose: someone who just said the wake
+    word is expected to speak, someone who was merely spoken to is not.
+    """
+    rig.script([True, False])
+    first, second = rig.windows
+    assert first is None
+    assert second == rig.faethon.config.conversation.follow_up_ms
+
+
+def test_silence_after_a_reply_closes_with_the_falling_chime(rig):
+    rig.script([True, False])
+    assert rig.chimes == ["ack.wav", "ack.wav", "done.wav"]
+    assert ACK_SOUND.name == "ack.wav" and CLOSE_SOUND.name == "done.wav"
+
+
+def test_a_false_wake_closes_silently(rig):
+    """Nobody spoke after the wake word, so there is no conversation to end.
+
+    Playing the closing chime here would answer every misfire with a noise in
+    a quiet room -- exactly when a false trigger is most annoying.
+    """
+    rig.script([False])
+    assert rig.chimes == ["ack.wav"]
+
+
+def test_faethons_own_voice_is_dropped_before_it_listens_again(rig):
+    """The drain must land between the reply and the next listening window.
+
+    arecord runs throughout, so without this the follow-up window opens onto a
+    buffer holding the reply Faethon just spoke, and it answers itself.
+    """
+    rig.script([True, True, False])
+    assert rig.events == [
+        ("chime", "ack.wav"), ("turn", None), ("drain",),
+        ("chime", "ack.wav"), ("turn", 5000), ("drain",),
+        ("chime", "ack.wav"), ("turn", 5000),
+        ("chime", "done.wav"),
+    ]
+
+
+def test_a_silent_turn_is_not_drained(rig):
+    """Nothing was said, so nothing of Faethon's is in the buffer to drop."""
+    rig.script([False])
+    assert ("drain",) not in rig.events
+
+
+def test_follow_up_off_gives_back_the_old_single_turn_behaviour(rig):
+    rig.faethon.config.conversation.follow_up = False
+    rig.script([True])
+    assert rig.windows == [None]
+    assert rig.chimes == ["ack.wav"]
+    # Still drained: the stale reply would otherwise be fed to the wake model.
+    assert ("drain",) in rig.events
+
+
+def test_shutdown_mid_conversation_stops_the_loop(rig):
+    """SIGTERM during a turn must not buy another follow-up window."""
+    def fake_turn(stream, start_timeout_ms=None):
+        rig.events.append(("turn", start_timeout_ms))
+        rig.faethon._running = False
+        return True
+
+    rig.faethon._handle_turn = fake_turn
+    rig.faethon._converse(FakeStream(rig.events))
+    assert rig.windows == [None]

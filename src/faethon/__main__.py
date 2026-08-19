@@ -1,10 +1,19 @@
 """Faethon's main loop.
 
-    listen -> wake word -> chime -> record -> STT -> route -> TTS -> listen
+    wake word -> chime -> record -> STT -> route -> TTS -+-> chime -> record ...
+                                                         |
+                                          silence -> chime -> back to wake word
 
-Half-duplex by design: the microphone stream is torn down while Faethon speaks.
-Sharing it would mean hearing its own reply and waking on it. Barge-in would
-need echo cancellation, which is a bigger job than v1 warrants.
+Only the first turn of a conversation needs the wake word. After each reply the
+mic reopens for `conversation.follow_up_ms`, so "and what about tomorrow?" works
+without saying "hey rhasspy" again. Silence through that window plays the
+closing chime and hands back to wake-word detection.
+
+Half-duplex by design: Faethon cannot hear you while it is talking. Barge-in
+would need echo cancellation, which is a bigger job than v1 warrants. arecord
+does keep running throughout, so a reply ends with Faethon's own voice sitting
+in the capture buffer -- see the drain in `_converse`, without which it hears
+itself and answers its own sentence.
 """
 
 from __future__ import annotations
@@ -30,7 +39,8 @@ from .wake import WakeWordDetector
 
 log = logging.getLogger("faethon")
 
-ACK_SOUND = ASSETS_DIR / "ack.wav"
+ACK_SOUND = ASSETS_DIR / "ack.wav"      # "go ahead"
+CLOSE_SOUND = ASSETS_DIR / "done.wav"   # "we're finished; wake me again"
 
 
 class Faethon:
@@ -73,9 +83,9 @@ class Faethon:
 
     # -- pipeline stages -------------------------------------------------
 
-    def _capture_utterance(self, read_frame) -> bytes | None:
+    def _capture_utterance(self, read_frame, start_timeout_ms=None) -> bytes | None:
         """Record until the user stops talking. Returns None if nothing usable."""
-        self.recorder.reset()
+        self.recorder.reset(start_timeout_ms)
         while self._running:
             status = self.recorder.feed(read_frame())
             if status is not Status.LISTENING:
@@ -87,7 +97,7 @@ class Faethon:
         if result.status is Status.TIMED_OUT:
             log.info("utterance hit the %dms cap", self.config.utterance.max_ms)
         if not result.usable:
-            log.info("no speech after wake word (%s)", result.status.name)
+            log.info("nothing to transcribe (%s)", result.status.name)
             return None
         return result.pcm
 
@@ -110,13 +120,17 @@ class Faethon:
             # Nothing to say it with -- log loudly, stay alive.
             log.error("tts failed: %s", e)
 
-    def _handle_turn(self, read_frame) -> None:
-        """One full exchange, from chime to spoken reply."""
-        playback.play_wav_async(ACK_SOUND, self.config.audio.output_device)
+    def _handle_turn(self, read_frame, start_timeout_ms=None) -> bool:
+        """One exchange: record, transcribe, answer.
 
-        pcm = self._capture_utterance(read_frame)
+        Returns whether Faethon said anything. That is the signal `_converse`
+        uses to decide whether to hold the conversation open -- if Faethon just
+        spoke, the user may well reply, including when what it said was an
+        apology for not understanding them.
+        """
+        pcm = self._capture_utterance(read_frame, start_timeout_ms)
         if pcm is None:
-            return
+            return False
 
         # Clock starts when the user stops talking -- that's the silence they
         # actually perceive as lag.
@@ -135,12 +149,12 @@ class Faethon:
         except OpenRouterError as e:
             log.error("stt failed: %s", e)
             self._speak("Sorry, I couldn't understand that.")
-            return
+            return True
         t_stt = time.monotonic() - started
 
         if not text:
             log.info("empty transcript")
-            return
+            return False
 
         log.info("heard: %s", text)
 
@@ -157,6 +171,42 @@ class Faethon:
         )
         if not spoken:
             log.info("nothing to say")
+        return bool(spoken)
+
+    def _converse(self, stream) -> None:
+        """Run turns back to back until the user stops answering.
+
+        The wake word opens the first turn; every turn after that is opened by
+        the follow-up window alone.
+        """
+        # None means "use the configured wake-word budget" for the first turn.
+        window_ms: int | None = None
+
+        while self._running:
+            playback.play_wav_async(ACK_SOUND, self.config.audio.output_device)
+            replied = self._handle_turn(stream, window_ms)
+
+            if replied:
+                # Faethon has been talking over a live microphone. Drop what it
+                # recorded of itself before listening, or the follow-up window
+                # transcribes its own reply back to it.
+                dropped = stream.drain()
+                log.debug(
+                    "dropped %.1fs of self-audio",
+                    dropped / 2 / self.config.audio.sample_rate,
+                )
+
+            if not replied or not self.config.conversation.follow_up:
+                # Only announce the close if a follow-up window was actually
+                # open. A wake word that nobody followed with speech is a false
+                # trigger, and answering it with a chime is just more noise.
+                if window_ms is not None and not replied:
+                    playback.play_wav(CLOSE_SOUND, self.config.audio.output_device)
+                    log.info("no follow-up; conversation closed")
+                return
+
+            window_ms = self.config.conversation.follow_up_ms
+            log.info("listening for a follow-up (%dms, no wake word needed)", window_ms)
 
     # -- main loop -------------------------------------------------------
 
@@ -184,7 +234,7 @@ class Faethon:
         ) as read_frame:
             while self._running:
                 if self.detector.process(read_frame()) is not None:
-                    self._handle_turn(read_frame)
+                    self._converse(read_frame)
                     # Flush the wake model: the tail of Faethon's own reply may
                     # still be in its feature buffer.
                     self.detector.reset()

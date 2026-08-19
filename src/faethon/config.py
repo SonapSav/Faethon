@@ -47,6 +47,24 @@ class UtteranceConfig(BaseModel):
     speech_onset_ms: int = 120
 
 
+class ConversationConfig(BaseModel):
+    """Whether a reply leaves the mic open for a follow-up.
+
+    Without this every sentence needs the wake word again, which makes a
+    back-and-forth exhausting: "hey rhasspy, what's the weather" ... "hey
+    rhasspy, and tomorrow?".
+    """
+
+    #: Listen again after each reply, so only the first turn needs the wake word.
+    follow_up: bool = True
+    #: How long to wait for that follow-up before closing the conversation.
+    #: Deliberately not utterance.start_timeout_ms: that budget is spent by
+    #: someone who has just deliberately said the wake word and is expected to
+    #: speak, while this one is usually spent on silence, and every millisecond
+    #: of it is a millisecond the mic stays live after Faethon stops talking.
+    follow_up_ms: int = 5000
+
+
 class ModelsConfig(BaseModel):
     stt: str
     llm: str
@@ -95,6 +113,7 @@ class Config(BaseModel):
     audio: AudioConfig
     wake: WakeConfig
     utterance: UtteranceConfig
+    conversation: ConversationConfig = ConversationConfig()
     models: ModelsConfig
     stt: STTConfig = STTConfig()
     llm: LLMConfig

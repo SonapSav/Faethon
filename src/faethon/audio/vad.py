@@ -83,7 +83,16 @@ class UtteranceRecorder:
         self._vad_frame_bytes = sample_rate * VAD_FRAME_MS // 1000 * 2
         self.reset()
 
-    def reset(self) -> None:
+    def reset(self, start_timeout_ms: int | None = None) -> None:
+        """Clear state for a new recording.
+
+        `start_timeout_ms` overrides the configured budget for this recording
+        only -- a follow-up window after a reply is a different wait from the
+        one after a wake word, but it is the same state machine.
+        """
+        self._start_timeout_ms = (
+            self.start_timeout_ms if start_timeout_ms is None else start_timeout_ms
+        )
         self._chunks: list[bytes] = []
         self._pending = b""       # leftover shorter than one VAD frame
         self._bytes = 0
@@ -157,7 +166,7 @@ class UtteranceRecorder:
                 return Status.LISTENING
             if self._elapsed_ms >= self.max_ms:
                 return Status.TIMED_OUT
-        elif self._elapsed_ms >= self.start_timeout_ms:
+        elif self._elapsed_ms >= self._start_timeout_ms:
             # Never started talking. A false wake, or they changed their mind.
             return Status.NO_SPEECH
 

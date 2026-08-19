@@ -7,8 +7,13 @@ OpenRouter, so the Pi only ever runs one small model.
 
 ```
 mic → wake word (local) → chime → record → STT → skill or LLM → TTS → speaker
-                                                        ╰── streamed ──╯
+                            ↑                           ╰── streamed ──╯     │
+                            ╰───────────── follow-up window ─────────────────╯
 ```
+
+Only the first thing you say needs the wake word. Faethon listens again for
+five seconds after each reply, so "and what about tomorrow?" just works. Say
+nothing and a falling chime closes the conversation.
 
 The reply is spoken sentence by sentence as the model generates it, rather than
 after. Waiting for the whole reply costs (generation + synthesis); streaming
@@ -111,6 +116,47 @@ wake:
 Pretrained alternatives: `alexa`, `hey_mycroft`, `hey_jarvis`. Avoid `alexa` if
 you own an Echo.
 
+## Carrying on a conversation
+
+After every reply the microphone reopens for a follow-up, so only the first
+turn of a conversation needs the wake word.
+
+```yaml
+conversation:
+  follow_up: true
+  follow_up_ms: 5000
+```
+
+A rising chime means Faethon is listening; a falling one means the conversation
+is over and the wake word is needed again. Nothing else distinguishes them, so
+they're the same two notes in opposite order — audible across a room without
+having to be learned.
+
+`follow_up_ms` is worth thinking about as a privacy setting, not just a latency
+one: it's the only period when the microphone is live without anyone having
+deliberately triggered it, and it is spent in full, as silence, at the end of
+every conversation. Below about 3s it clips people still deciding what to ask;
+above about 8s the pause after a reply starts to feel like a hang. Set
+`follow_up: false` for one question per wake word.
+
+A follow-up turn is a turn like any other: it goes into the same 10-turn
+memory, so pronouns carry across ("what's the capital of France?" → "how big is
+it?").
+
+Two things this needs that aren't obvious:
+
+- **Faethon's own voice has to be flushed from the microphone.** `arecord` runs
+  the whole time, including while Faethon talks, so a reply ends with a
+  recording of that reply sitting in the capture buffer. Left there, the
+  follow-up window transcribes it and Faethon answers its own sentence. The
+  buffer is drained after speaking and never before — the audio arriving right
+  after a wake word is you running straight on into your question.
+- **The two waits are separate budgets.** `utterance.start_timeout_ms` is spent
+  by someone who just said the wake word and is expected to speak;
+  `conversation.follow_up_ms` is spent by someone who was merely spoken to, and
+  usually on silence. Once you start talking, `silence_ms` takes over as
+  normal — a short follow-up window won't cut off a long answer.
+
 A custom-trained model lives at `models/hey_roxy.onnx` but is not used: it
 scored 0.84-0.91 on synthesised voices and only 0.52-0.55 on a real one,
 detecting roughly 1 utterance in 4. It appears to have been trained on
@@ -193,6 +239,7 @@ The knobs, in the order they're worth reaching for:
 |---|---|
 | Long pause before anything happens | `utterance.silence_ms` — dead air before Faethon even starts. 600ms is near the floor; below that it cuts people off mid-sentence. |
 | Gives up while you're still thinking | `utterance.start_timeout_ms` — the budget for starting to speak, separate from `silence_ms`. |
+| Closes the conversation too fast, or holds the mic open too long after a reply | `conversation.follow_up_ms`. |
 | Gives up in a noisy room | `utterance.speech_onset_ms` — sustained voice needed before Faethon believes you've started. |
 | `stt` line is slow | `models.stt` — `whisper-large-v3-turbo` is the fast default; plain `whisper-large-v3` is more accurate and slower. |
 | Slow to start talking | `llm.max_tokens` — shorter replies finish sooner. Also try a different model; provider latency varies a lot more than the Pi does. |
@@ -255,18 +302,13 @@ reasoning: {"max_tokens": 0}      # WRONG - still burns the tokens
 Turn reasoning on only if you also raise `max_tokens` a long way, and accept
 that a reply you have to wait several seconds for is a poor fit for speech.
 
-It also **folds under pressure** unless told not to. Out of the box it would
-answer "King Charles the Third" correctly, then on being told "that's wrong"
-reply *"You're right — the United Kingdom doesn't have a king."* Confidently
-wrong on the second try is worse than useless when there's no transcript to
-scroll back through. The system prompt in `config.yaml` therefore tells it to
-reconsider honestly and hold its ground when it was right — measured 4/4 held,
-while still correcting itself when genuinely wrong (7 × 8).
-
 ## Known limits
 
 - **Half-duplex.** Faethon can't hear you while it's talking; interrupting it
-  would need echo cancellation.
+  would need echo cancellation. A follow-up can only start once it has stopped.
+- **A follow-up window has no cap on how long a conversation can run.** Anything
+  that keeps producing speech Whisper will transcribe — a television in the same
+  room — can hold one open indefinitely, and every turn is a paid API call.
 - **Memory is 10 turns and RAM-only.** It forgets on restart, deliberately.
 - **One wake word at a time.**
 
