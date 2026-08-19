@@ -320,6 +320,46 @@ fails in the worst way available: it falls through to the LLM, which cannot see
 your balance and will invent a plausible one. `open[\s.\-]*r[oeu]{1,3}ter`
 accepts the vowel cluster loosely instead.
 
+## When it can't work
+
+Every way Faethon breaks used to sound identical: silence. That isn't laziness
+in the error handling, it's structural — the mechanism for speaking is the
+thing that has broken. The code caught a failed transcription, which almost
+always means the network is down, and called cloud TTS to apologise for it.
+
+So the failure states have pre-rendered clips, played straight to the speaker
+with no network, key, credit or model involved:
+
+| you hear | what happened | what to do |
+|---|---|---|
+| "I can't reach the network right now." | request failed or retries exhausted | check the router |
+| "My OpenRouter credit has run out." | HTTP 402 | top up |
+| "I can't hear the microphone." | `CaptureError`, or minutes of digital silence | check the mic |
+| "Something has gone wrong and I have stopped." | the service gave up | `journalctl -u faethon` |
+
+Credit and network are separate clips because the fixes are different, and
+guessing wrong sends you to reboot a router that was working fine.
+
+**The microphone one catches a failure that raises nothing.** A wireless mic
+whose transmitter is off or flat still enumerates, still opens, and still hands
+over frames — of digital silence, indefinitely, looking perfectly healthy. So
+`SilenceWatch` notices when the stream has been *literally* all-zero for two
+minutes. A live mic in a silent room never is: measured here, a quiet room
+still peaks at 2–4 per frame.
+
+Each status is announced once and then suppressed until something works again —
+an outage lasts as long as it lasts, and repeating it every attempt turns
+information into nagging.
+
+The last row is systemd's, not Faethon's, via `OnFailure=faethon-failed.service`
+— a `oneshot` that runs nothing but `aplay`, so it still works when a missing
+key or a broken venv means no Faethon code can run at all. That also means the
+unit gives up after five crashes in five minutes rather than retrying forever:
+a unit that never fails can never announce that it failed, and this service
+spent its first half hour crash-looping silently for exactly that reason.
+
+Regenerate the clips with `uv run python scripts/make_speech.py`.
+
 ## Starting up
 
 When the service starts, Faethon says **"Hi, I am up and running! Say my name

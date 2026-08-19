@@ -36,6 +36,15 @@ echo "uv cache: $UV_CACHE"
 
 sudo -u "$OWNER" mkdir -p "$UV_CACHE"
 
+# The announce-on-failure unit: same rewriting, plus the audio device, which
+# it cannot read from config.yaml the way Faethon does.
+DEVICE="$(grep -oP '^\s*output_device:\s*"\K[^"]+' "$PROJECT_DIR/config.yaml" || echo default)"
+sed -e "s|^User=.*|User=$OWNER|" \
+    -e "s|^Group=.*|Group=$OWNER|" \
+    -e "s|^ExecStart=.*|ExecStart=/usr/bin/aplay -D $DEVICE -q $PROJECT_DIR/assets/failed.wav|" \
+    "$PROJECT_DIR/systemd/faethon-failed.service" > /etc/systemd/system/faethon-failed.service
+echo "device  : $DEVICE"
+
 sed -e "s|^User=.*|User=$OWNER|" \
     -e "s|^Group=.*|Group=$OWNER|" \
     -e "s|^WorkingDirectory=.*|WorkingDirectory=$PROJECT_DIR|" \

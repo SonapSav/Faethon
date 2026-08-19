@@ -5,10 +5,25 @@ Documentation=https://github.com/local/faethon
 # devices enumerated before opening the mic.
 After=network-online.target sound.target
 Wants=network-online.target
-# Don't give up after the default 5 attempts: a mic that's briefly unplugged
-# or a router still booting shouldn't take Faethon down permanently. This has
-# to live in [Unit] -- systemd ignores it under [Service].
-StartLimitIntervalSec=0
+# Give up after five crashes in five minutes, and say so out loud (below).
+# Not the earlier StartLimitIntervalSec=0: retrying forever meant the unit
+# never reached a failed state, so nothing could ever announce that Faethon
+# was broken -- it just looped silently, which is how this service spent its
+# first half hour of existence.
+#
+# Nothing transient reaches here anyway. A lost network doesn't crash Faethon,
+# it fails calls; an unplugged microphone raises CaptureError, which the run
+# loop catches and retries in-process. Reaching five crashes means something is
+# properly broken, and looping on it is no better than stopping.
+#
+# Both keys have to live in [Unit]. systemd ignores them under [Service], which
+# it does quietly enough that the feature simply never happens.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Say so out loud when it does give up. Everything else Faethon announces goes
+# through Faethon, which is no use when Faethon is what failed.
+OnFailure=faethon-failed.service
 
 [Service]
 Type=simple

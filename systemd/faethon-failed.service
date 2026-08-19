@@ -1,0 +1,16 @@
+[Unit]
+Description=Announce that Faethon has stopped
+# Triggered by OnFailure= in faethon.service. Deliberately depends on nothing
+# and runs nothing of Faethon's: the whole point is that it works when Faethon
+# does not -- a missing key, a broken venv, an import error at startup. Those
+# leave the assistant silent and gone, with no way to tell from across the room
+# whether it is thinking, deaf, or dead.
+
+[Service]
+Type=oneshot
+User=webmaster
+Group=webmaster
+SupplementaryGroups=audio
+# aplay and a WAV. No Python, no network, nothing that can itself fail for the
+# same reason the service just did.
+ExecStart=/usr/bin/aplay -D plughw:CARD=Headphones,DEV=0 -q /home/webmaster/apps/faethon/assets/failed.wav

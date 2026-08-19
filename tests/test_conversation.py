@@ -16,6 +16,7 @@ import pytest
 
 from faethon.__main__ import ACK_SOUND, CLOSE_SOUND, Faethon
 from faethon.config import load_config
+from faethon.status import Announcer, SilenceWatch
 
 
 class FakeStream:
@@ -53,6 +54,12 @@ def rig(monkeypatch):
             self.faethon = Faethon.__new__(Faethon)
             self.faethon.config = load_config()
             self.faethon._running = True
+            self.faethon.announcer = Announcer(
+                self.faethon.config.audio.output_device
+            )
+            self.faethon.silence = SilenceWatch(
+                self.faethon.config.audio.frame_ms
+            )
             self.events = events
 
         def script(self, replies: list[bool]) -> None:

@@ -164,6 +164,11 @@ class _Speaker:
     def stopped(self) -> bool:
         return self._stopped.is_set()
 
+    @property
+    def error(self) -> BaseException | None:
+        """Whatever stopped the audio, if anything did."""
+        return self._error
+
     def stop(self) -> None:
         """Cut the reply off mid-sentence. Called from the barge-in thread.
 
@@ -308,10 +313,16 @@ class Spoken(str):
     """
 
     interrupted: bool = False
+    #: True when the words were produced but never became audible, which is
+    #: otherwise indistinguishable from Faethon ignoring you.
+    failed: bool = False
 
-    def __new__(cls, text: str, interrupted: bool = False) -> "Spoken":
+    def __new__(
+        cls, text: str, interrupted: bool = False, failed: bool = False
+    ) -> "Spoken":
         self = super().__new__(cls, text)
         self.interrupted = interrupted
+        self.failed = failed
         return self
 
 
@@ -355,4 +366,8 @@ def speak_streaming(
 
     if spoken and first is not None:
         log.info("first audio in %.2fs (%d chunk(s))", first, len(spoken))
-    return Spoken(" ".join(spoken), interrupted=speaker.stopped)
+    return Spoken(
+        " ".join(spoken),
+        interrupted=speaker.stopped,
+        failed=speaker.error is not None,
+    )

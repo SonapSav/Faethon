@@ -27,6 +27,17 @@ BACKOFF_BASE = 0.6
 class OpenRouterError(RuntimeError):
     """A request failed in a way retrying will not fix."""
 
+    #: HTTP status, when the failure came back as one. None means the request
+    #: never got an answer -- which is the difference between "no network" and
+    #: "no credit", two problems with entirely different fixes.
+    status: int | None = None
+
+
+def _http_error(path: str, status: int, body: str) -> OpenRouterError:
+    err = OpenRouterError(f"{path} -> {status}: {body}")
+    err.status = status
+    return err
+
 
 class OpenRouterClient:
     def __init__(self, api_key: str, timeout: float = 60.0) -> None:
@@ -96,7 +107,7 @@ class OpenRouterClient:
                 continue
 
             if r.status_code >= 400:
-                raise OpenRouterError(f"{path} -> {r.status_code}: {r.text[:400]}")
+                raise _http_error(path, r.status_code, r.text[:400])
 
             data = r.json()
             self._record_cost(data)
@@ -123,7 +134,7 @@ class OpenRouterClient:
                         continue
                     if r.status_code >= 400:
                         body = r.read().decode(errors="replace")[:400]
-                        raise OpenRouterError(f"{path} -> {r.status_code}: {body}")
+                        raise _http_error(path, r.status_code, body)
 
                     # Past here the caller owns the stream. A failure while
                     # reading it must NOT be retried: the caller has already

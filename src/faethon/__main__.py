@@ -36,6 +36,7 @@ from .providers.client import OpenRouterClient, OpenRouterError
 from .router import Router
 from .skills.registry import Registry
 from .speech import Spoken, speak_streaming
+from .status import NO_MIC, NO_NETWORK, Announcer, SilenceWatch, classify
 from .wake import WakeWordDetector
 
 log = logging.getLogger("faethon")
@@ -74,6 +75,8 @@ class Faethon:
             speech_onset_ms=config.utterance.speech_onset_ms,
         )
         self._running = True
+        self.announcer = Announcer(config.audio.output_device)
+        self.silence = SilenceWatch(config.audio.frame_ms)
 
         if not config.tts.voice:
             # Leaving this empty is not the same as taking the provider's
@@ -157,7 +160,9 @@ class Faethon:
             )
         except OpenRouterError as e:
             log.error("stt failed: %s", e)
-            self._speak("Sorry, I couldn't understand that.")
+            # Not _speak(): that synthesises over the network which just
+            # failed, so the apology was never heard. The clip is local.
+            self.announcer.say(classify(e))
             return True
         t_stt = time.monotonic() - started
 
@@ -177,6 +182,13 @@ class Faethon:
         action = self.router.take_pending_action()
         if action is not None:
             action()
+
+        if spoken.failed:
+            # The words exist but were never audible. Silence here reads as
+            # Faethon having ignored the question.
+            self.announcer.say(NO_NETWORK)
+        else:
+            self.announcer.recovered()
 
         total = time.monotonic() - started
         log.info(
@@ -288,6 +300,7 @@ class Faethon:
                 # The USB mic was unplugged, or the wireless link dropped.
                 # Keep trying: it usually comes back.
                 log.error("audio capture lost: %s -- retrying in 3s", e)
+                self.announcer.say(NO_MIC)
                 time.sleep(3)
 
     def _listen_once(self) -> None:
@@ -307,7 +320,14 @@ class Faethon:
                 # at the deadline instead of merely being ignored by the next
                 # turn -- which would leave it sitting in RAM.
                 self.memory.expire_if_idle()
-                if self.detector.process(read_frame()) is not None:
+                frame = read_frame()
+                if self.silence.feed(frame):
+                    # Raises nothing and logs nothing on its own: a wireless
+                    # mic with a flat transmitter hands over digital silence
+                    # forever and looks perfectly healthy doing it.
+                    log.error("microphone has been silent for minutes")
+                    self.announcer.say(NO_MIC)
+                if self.detector.process(frame) is not None:
                     self._converse(read_frame)
                     # Flush the wake model: the tail of Faethon's own reply may
                     # still be in its feature buffer.
