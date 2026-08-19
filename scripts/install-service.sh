@@ -18,6 +18,11 @@ UNIT_DST="/etc/systemd/system/faethon.service"
 OWNER="$(stat -c '%U' "$PROJECT_DIR")"
 UV_BIN="$(sudo -u "$OWNER" bash -lc 'command -v uv' 2>/dev/null || echo "/home/$OWNER/.local/bin/uv")"
 
+# uv's cache sits outside the project, so ProtectHome hides it unless the unit
+# names it. Create it if this is a fresh machine -- systemd refuses to start a
+# unit whose ReadWritePaths doesn't exist.
+UV_CACHE="$(sudo -u "$OWNER" bash -lc 'echo "${UV_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/uv}"')"
+
 if [ ! -x "$UV_BIN" ]; then
   echo "uv not found for user $OWNER (looked at $UV_BIN)" >&2
   echo "Install it: curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
@@ -27,13 +32,16 @@ fi
 echo "project : $PROJECT_DIR"
 echo "user    : $OWNER"
 echo "uv      : $UV_BIN"
+echo "uv cache: $UV_CACHE"
+
+sudo -u "$OWNER" mkdir -p "$UV_CACHE"
 
 sed -e "s|^User=.*|User=$OWNER|" \
     -e "s|^Group=.*|Group=$OWNER|" \
     -e "s|^WorkingDirectory=.*|WorkingDirectory=$PROJECT_DIR|" \
     -e "s|^ExecStart=.*|ExecStart=$UV_BIN run --project $PROJECT_DIR faethon|" \
     -e "s|^EnvironmentFile=.*|EnvironmentFile=-$PROJECT_DIR/.env|" \
-    -e "s|^ReadWritePaths=.*|ReadWritePaths=$PROJECT_DIR|" \
+    -e "s|^ReadWritePaths=.*|ReadWritePaths=$PROJECT_DIR $UV_CACHE|" \
     "$UNIT_SRC" > "$UNIT_DST"
 
 if ! id -nG "$OWNER" | grep -qw audio; then
