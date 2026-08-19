@@ -78,14 +78,3 @@ def synthesize_stream(
         for chunk in r.iter_bytes(CHUNK_BYTES):
             if chunk:
                 yield chunk
-
-
-def synthesize(
-    client: OpenRouterClient,
-    text: str,
-    *,
-    model: str,
-    voice: str | None,
-) -> bytes:
-    """Fully buffered variant, for tests and the probe CLI."""
-    return b"".join(synthesize_stream(client, text, model=model, voice=voice))

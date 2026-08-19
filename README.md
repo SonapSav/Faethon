@@ -19,15 +19,16 @@ it's still talking and it stops.
 The reply is spoken sentence by sentence as the model generates it, rather than
 after. Waiting for the whole reply costs (generation + synthesis); streaming
 costs (first clause + synthesis of that clause), with the rest pipelined behind
-audio that's already playing. Measured on this Pi, that's about **4.5s → 2.7s**
-to first word.
+audio that's already playing. Measured on this Pi 2026-08-17, that's about
+**4.5s → 2.7s** to first word. Both halves of that comparison move with
+provider latency; the ratio is the durable part, not the absolute figures.
 
 Synthesis and playback run on **separate threads**, which matters more than it
 sounds. `aplay` applies backpressure, so a single worker doing both wouldn't
 request the next sentence until the current one had finished playing — a silent
 gap at every full stop the length of a whole TTS round-trip. Measured at
-**+7.6s of dead air, now +1.7s** (and what's left is the initial synthesis,
-not a gap between sentences).
+**+7.6s of dead air, now +1.7s** (measured 2026-08-17; what's left is the
+initial synthesis, not a gap between sentences).
 
 ## What it costs
 
@@ -486,6 +487,13 @@ Faethon logs a breakdown every turn, timed from the moment you stop speaking:
 ```
 turn: 2.3s audio | stt 0.81s | reply+speech 2.66s | total 3.47s | $0.00004
 ```
+
+That line is a good turn from 2026-08-17, not a promise. Both cloud legs vary
+a great deal more than the Pi does: measured 2026-08-19, STT ran a median of
+1.9s over eight identical calls with one at 19.4s, and the LLM leg ranged
+0.63s to 13.38s before `provider_sort` was set. If a turn feels slow, compare
+against the `turn:` lines either side of it rather than against this one —
+the tail is provider behaviour, not something that regressed locally.
 
 The knobs, in the order they're worth reaching for:
 

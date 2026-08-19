@@ -58,9 +58,6 @@ class Registry:
     def get(self, name: str) -> Skill | None:
         return self._skills.get(name)
 
-    def by_tag(self, tag: str) -> list[Skill]:
-        return [s for s in self if s.tag == tag]
-
     def match(self, text: str) -> tuple[Skill, dict[str, str]] | None:
         """First skill whose regex matches. Order is registration order."""
         for skill in self:

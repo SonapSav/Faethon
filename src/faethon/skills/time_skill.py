@@ -19,12 +19,19 @@ class TimeSkill(Skill):
         "Use when the user asks what time or day it is."
     )
 
+    #: The question has to *end* here. Without it, "what is the time complexity
+    #: of quicksort" and "what is the date of the meeting" both answered with
+    #: the clock -- \b after "time" is satisfied by the following space, so the
+    #: pattern matched a fragment of a longer, unrelated question.
+    #: A few trailing pleasantries are allowed, since people say them.
+    _END = r"(?:\s+(?:now|today|right now|please|for me))*[^\w]*$"
+
     patterns = [
-        r"\bwhat(?:'s|s| is) the (?P<kind>time|date)\b",
-        r"\bwhat (?P<kind>time|day) is it\b",
-        r"\bwhat(?:'s|s| is) (?:today'?s? )?(?P<kind>date|day)\b",
-        r"\btell me the (?P<kind>time|date)\b",
-        r"\bcurrent (?P<kind>time|date)\b",
+        rf"\bwhat(?:'s|s| is) the (?P<kind>time|date){_END}",
+        rf"\bwhat (?P<kind>time|day) is it{_END}",
+        rf"\bwhat(?:'s|s| is) (?:today'?s? )?(?P<kind>date|day){_END}",
+        rf"\btell me the (?P<kind>time|date){_END}",
+        rf"\bcurrent (?P<kind>time|date){_END}",
     ]
 
     parameters = {

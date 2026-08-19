@@ -231,3 +231,20 @@ def test_router_uses_the_memory_it_was_given(config):
 
     r.memory.add("a", "b")
     assert len(mem) == 1
+
+
+def test_an_interrupted_skill_reply_is_still_remembered(router, monkeypatch):
+    """Barge-in closes the generator at the yield.
+
+    The LLM path already guaranteed this with a finally; the skill path
+    recorded after the yield and so lost the exchange. Inconsistent in a way
+    that would only show up as Faethon forgetting some turns and not others.
+    """
+    stream = router.handle_streaming("please echo banana")
+    said = next(stream)
+    stream.close()
+
+    assert said == "echo banana"
+    history = router.memory.messages("sys", "next")
+    assert history[1]["content"] == "please echo banana"
+    assert history[2]["content"] == "echo banana"

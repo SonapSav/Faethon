@@ -88,9 +88,13 @@ class Router:
             else:
                 log.info("regex -> %s(%s)", skill.name, params)
                 spoken = self._run(skill.name, params)
+            # Recorded before the yield, not after. Barge-in closes this
+            # generator at the yield, and an exchange the user actually heard
+            # should be remembered whether or not they let it finish -- which
+            # is what the LLM path's finally below already guarantees.
+            self._record(text, spoken)
             if spoken:
                 yield spoken
-            self._record(text, spoken)
             return
 
         from .speech import sentence_chunks  # local: avoids a circular import
