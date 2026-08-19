@@ -51,7 +51,7 @@ def rig(monkeypatch):
 
     rig = Rig()
 
-    def fake_synth(client, text, *, model, voice, on_rate=None):
+    def fake_synth(client, text, *, model, voice, on_rate=None, cost_per_1k_chars=0.0):
         time.sleep(rig.delays.get(text, 0.0))
         if text in rig.fail:
             raise OpenRouterError(f"synthetic failure for {text!r}")

@@ -237,6 +237,21 @@ tts:
   # To list any provider's voices, send a bogus one; the 400 enumerates them.
   voice: "alloy"
 
+  # USD per 1000 characters of input text, used to estimate what speaking cost.
+  # The speech endpoint returns raw audio with no usage body, /generation 404s
+  # for TTS ids, and /credits updates in batches too coarse to attribute one
+  # call -- so unlike STT and the LLM there is nothing authoritative to read,
+  # and this is the only way the figure includes it at all.
+  #
+  # Billed on the text sent, not the audio produced. OpenRouter quotes
+  # fish-audio/s1 at 0.000015 per input token; five calls totalling 345
+  # characters cost $0.001107, which is $0.0032 per thousand characters and
+  # agrees with the quoted price at about four characters to the token.
+  #
+  # Re-measure if you change tts model, or set 0 to leave it out rather than
+  # report a number from the wrong price list.
+  cost_per_1k_chars: 0.0032
+
   # Fallback only. The real rate is read from the response Content-Type, since
   # models disagree (Fish Audio 44.1 kHz, Kokoro and Deepgram 24 kHz) and
   # playing at the wrong one is badly wrong, not subtly wrong.

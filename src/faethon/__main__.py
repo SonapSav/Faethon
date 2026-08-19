@@ -126,6 +126,7 @@ class Faethon:
                     text,
                     model=self.config.models.tts,
                     voice=self.config.tts.voice,
+                    cost_per_1k_chars=self.config.tts.cost_per_1k_chars,
                 ):
                     write(chunk)
         except OpenRouterError as e:

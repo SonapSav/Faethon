@@ -39,6 +39,25 @@ def rate_from_content_type(content_type: str) -> int | None:
         return None
 
 
+def estimate_cost(text: str, cost_per_1k_chars: float) -> float:
+    """What speaking `text` cost, near enough.
+
+    An estimate because the speech endpoint returns raw audio and no usage
+    body, so unlike every other leg there is nothing authoritative to read.
+    /generation returns 404 for TTS ids, and /credits updates in batches too
+    coarse to attribute a single call.
+
+    Billed on the text sent rather than the audio produced: OpenRouter quotes
+    fish-audio/s1 at 0.000015 per input token, and five calls totalling 345
+    characters cost $0.001107 -- $0.0032 per thousand characters, which agrees
+    with the quoted price at roughly four characters to the token.
+
+    Leaving this uncounted understated a turn several times over, because
+    speaking is the most expensive thing Faethon does.
+    """
+    return len(text) / 1000 * cost_per_1k_chars
+
+
 def synthesize_stream(
     client: OpenRouterClient,
     text: str,
@@ -46,6 +65,7 @@ def synthesize_stream(
     model: str,
     voice: str | None,
     on_rate: Callable[[int], None] | None = None,
+    cost_per_1k_chars: float = 0.0,
 ) -> Iterator[bytes]:
     """Yield raw s16le mono PCM chunks as they arrive.
 
@@ -69,6 +89,9 @@ def synthesize_stream(
     }
     if voice:
         payload["voice"] = voice
+
+    if cost_per_1k_chars:
+        client.record_usage({"cost": estimate_cost(text, cost_per_1k_chars)})
 
     with client.post_stream("/audio/speech", payload) as r:
         if on_rate is not None:

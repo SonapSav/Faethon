@@ -115,6 +115,11 @@ class TTSConfig(BaseModel):
     voice: str = ""
     #: Fallback only -- the real rate comes from the response Content-Type.
     sample_rate: int = 24000
+    #: USD per 1000 characters of input text, used to estimate what speaking
+    #: cost. The speech endpoint returns raw audio with no usage body, so
+    #: nothing else can account for it -- and it is the largest part of a turn.
+    #: 0 disables the estimate rather than reporting a wrong one.
+    cost_per_1k_chars: float = Field(0.0032, ge=0.0)
 
 
 class Settings(BaseSettings):

@@ -136,3 +136,75 @@ def test_it_waits_before_deciding():
     """A few silent frames are just a pause in the room, not a broken mic."""
     watch = SilenceWatch(frame_ms=80, after_sec=120.0)
     assert not any(watch.feed(f) for f in frames(100, live=False))
+
+
+# -- TTS cost estimation -----------------------------------------------------
+# The speech endpoint returns raw audio and no usage body, so unlike every
+# other leg there is nothing authoritative to read. Left uncounted, a turn
+# reported several times less than it cost -- speaking is the most expensive
+# thing Faethon does.
+
+
+def test_speaking_cost_scales_with_the_text_sent():
+    """Billed on input text, not audio produced. Measured: five calls
+    totalling 345 characters cost $0.001107, i.e. $0.0032 per thousand."""
+    from faethon.providers.tts import estimate_cost
+
+    assert estimate_cost("x" * 1000, 0.0032) == pytest.approx(0.0032)
+    assert estimate_cost("x" * 345, 0.0032) == pytest.approx(0.001104, abs=1e-6)
+    assert estimate_cost("", 0.0032) == 0.0
+
+
+def test_a_zero_rate_disables_the_estimate_rather_than_guessing():
+    from faethon.providers.tts import estimate_cost
+
+    assert estimate_cost("a long spoken reply", 0.0) == 0.0
+
+
+def test_speaking_is_billed_to_the_client(monkeypatch):
+    """Without this the turn line omits the dominant cost of the turn."""
+    from faethon.providers import tts as tts_mod
+
+    class FakeClient:
+        spent = 0.0
+
+        def record_usage(self, usage):
+            self.spent += usage["cost"]
+
+        def post_stream(self, path, payload):
+            from contextlib import contextmanager
+
+            @contextmanager
+            def cm():
+                class R:
+                    headers = {"content-type": "audio/pcm;rate=44100"}
+
+                    def iter_bytes(self, n):
+                        return iter([b"\x00\x01"])
+
+                yield R()
+
+            return cm()
+
+    c = FakeClient()
+    list(tts_mod.synthesize_stream(
+        c, "x" * 500, model="m", voice="alloy", cost_per_1k_chars=0.0032
+    ))
+    assert c.spent == pytest.approx(0.0016)
+
+
+def test_nothing_is_billed_for_empty_text(monkeypatch):
+    """Whitespace never reaches the network, so it must not be charged for."""
+    from faethon.providers import tts as tts_mod
+
+    class Client:
+        spent = 0.0
+
+        def record_usage(self, usage):
+            self.spent += usage["cost"]
+
+    c = Client()
+    assert list(tts_mod.synthesize_stream(
+        c, "   ", model="m", voice="", cost_per_1k_chars=0.0032
+    )) == []
+    assert c.spent == 0.0

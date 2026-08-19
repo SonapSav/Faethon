@@ -33,9 +33,16 @@ initial synthesis, not a gap between sentences).
 ## What it costs
 
 Per spoken turn, roughly: Whisper Large v3 Turbo at $0.00000333/unit, DeepSeek
-V4 Flash at $0.08/M input and $0.16/M output, Fish Audio S1 at about $1 per
-thousand replies. Call it pennies a month for household use. `faethon-probe`
-prints the actual cost of each call.
+V4 Flash at $0.08/M input and $0.16/M output, Fish Audio S1 at $0.0032 per
+thousand characters of input text. Call it pennies a month for household use.
+`faethon-probe` prints the actual cost of each call.
+
+**Speaking is the expensive part**, and it is the one leg with no usage to
+read: `/audio/speech` returns raw audio, `/generation` 404s for TTS ids, and
+`/credits` updates in batches too coarse to attribute a single call. So it is
+estimated from the text sent, via `tts.cost_per_1k_chars`. Until that existed
+the turn line omitted it entirely and reported a turn at a fraction of what it
+actually cost.
 
 ## Requirements
 

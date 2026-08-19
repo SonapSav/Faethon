@@ -219,6 +219,7 @@ class _Speaker:
                 model=self._config.models.tts,
                 voice=self._config.tts.voice,
                 on_rate=self._note_rate,
+                cost_per_1k_chars=self._config.tts.cost_per_1k_chars,
             ):
                 if self._stopped.is_set():
                     # Stop pulling audio nobody will hear.
