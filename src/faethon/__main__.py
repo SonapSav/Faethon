@@ -292,7 +292,7 @@ def main() -> int:
     config = load_config(Path(args.config) if args.config else None)
 
     try:
-        client = OpenRouterClient(config.settings.openrouter_api_key)
+        client = OpenRouterClient(config.settings.openrouter_api_key.get_secret_value())
     except OpenRouterError as e:
         log.error("%s", e)
         return 1

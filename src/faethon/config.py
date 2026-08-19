@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -121,7 +121,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    openrouter_api_key: str = ""
+    #: SecretStr, not str: pydantic prints the whole Config in an assertion
+    #: diff or a validation error, and a plain string puts the key in every
+    #: failing test's output and every traceback anyone pastes anywhere.
+    #: Read it with .get_secret_value().
+    openrouter_api_key: SecretStr = SecretStr("")
 
 
 class Config(BaseModel):

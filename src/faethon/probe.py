@@ -256,7 +256,7 @@ def main() -> int:
 
     cfg = load_config()
     try:
-        with OpenRouterClient(cfg.settings.openrouter_api_key) as client:
+        with OpenRouterClient(cfg.settings.openrouter_api_key.get_secret_value()) as client:
             args.fn(cfg, client, args)
             print(f"  cost this run: ${client.spent:.6f}")
     except OpenRouterError as e:

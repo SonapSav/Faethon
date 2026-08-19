@@ -51,7 +51,7 @@ def main() -> int:
         model = "deepgram/aura-2"
 
     OUT.mkdir(exist_ok=True)
-    client = OpenRouterClient(cfg.settings.openrouter_api_key)
+    client = OpenRouterClient(cfg.settings.openrouter_api_key.get_secret_value())
 
     print(f"{'file':<26}{'sex':<5}{'character':<24}{'audio':>8}")
     print("-" * 63)
