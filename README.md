@@ -214,6 +214,43 @@ synthetic speech alone. If you train your own, **validate it against a
 recording of yourself**, not against TTS — that mistake is what made a
 threshold of 0.78 look reasonable when nothing could reach it.
 
+## Volume
+
+Say **"Hey Rhasspy, volume up"** or **"volume down"** to move one step. The
+scale is 0 to 10, where 0 is muted and 10 is the mixer's maximum. Also
+understands "louder", "quieter", "turn it up", "mute", "set the volume to 8",
+and "what's the volume".
+
+The mapping is the part worth knowing about. ALSA's PCM control on a Pi is
+scaled in **dB**, and the percentage `amixer` prints is a linear position in
+that range rather than a loudness — so the obvious implementation, level 5
+meaning 50%, is inaudible. Measured by playing a tone and recording it:
+
+| `amixer` says | actual | loudness at the mic |
+|---|---|---|
+| 96% | 0 dB | 103 |
+| 87% | −10 dB | 24 |
+| 77% | −20 dB | 8 |
+| 68% | −30 dB | 3 |
+| 49% | −50 dB | 2 — silence |
+
+Full volume already reads as 96%, and the entire useful range lives in the top
+third of the percentage scale. So the levels are spaced evenly in dB instead,
+which is roughly how loudness is perceived. Measured across the finished scale,
+each step is a consistent **1.53–1.55×** in amplitude, so one "volume up" feels
+like the same size step wherever you are on the dial.
+
+`USABLE_RANGE_DB` in `src/faethon/skills/volume_skill.py` is the one number to
+tune: 34 dB below maximum, the tone had reached the microphone's noise floor
+and going lower changed nothing audible. Lower it if level 1 is still too loud
+in a quiet room; raise it if the bottom of the scale is unusably quiet.
+
+The mixer control is discovered at runtime rather than hardcoded, for the same
+reason the rest of Faethon addresses ALSA by name: card indices move when USB
+devices are re-plugged. If no playback control is found the skill reports
+itself unavailable, so it's hidden from the LLM and explains itself out loud
+rather than failing silently.
+
 ## Writing a skill
 
 Drop a file in `src/faethon/skills/`. The registry finds it — no imports to
