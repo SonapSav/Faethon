@@ -354,9 +354,17 @@ information into nagging.
 The last row is systemd's, not Faethon's, via `OnFailure=faethon-failed.service`
 — a `oneshot` that runs nothing but `aplay`, so it still works when a missing
 key or a broken venv means no Faethon code can run at all. That also means the
-unit gives up after five crashes in five minutes rather than retrying forever:
-a unit that never fails can never announce that it failed, and this service
-spent its first half hour crash-looping silently for exactly that reason.
+unit has to be able to give up rather than retrying forever: a unit that never
+fails can never announce that it failed, and this service spent its first half
+hour crash-looping silently for exactly that reason.
+
+The limit is **8 starts in 60 seconds**, tuned to separate the two cases by
+*rate*, because systemd counts every start — including deliberate ones. A
+crash loop restarts every `RestartSec=5`, so it trips this in about 40s. A
+voice restart costs ~20s of speaking, exiting, waiting and greeting, so eight
+of them need over two minutes and can't trip a 60-second window. An earlier
+five-in-five-minutes setting put the unit into `start-limit-hit` after five
+uses of "restart yourself" — healthy, restarted on purpose, declared dead.
 
 Regenerate the clips with `uv run python scripts/make_speech.py`.
 

@@ -5,7 +5,7 @@ Documentation=https://github.com/local/faethon
 # devices enumerated before opening the mic.
 After=network-online.target sound.target
 Wants=network-online.target
-# Give up after five crashes in five minutes, and say so out loud (below).
+# Give up after eight starts in a minute, and say so out loud (below).
 # Not the earlier StartLimitIntervalSec=0: retrying forever meant the unit
 # never reached a failed state, so nothing could ever announce that Faethon
 # was broken -- it just looped silently, which is how this service spent its
@@ -16,10 +16,25 @@ Wants=network-online.target
 # loop catches and retries in-process. Reaching five crashes means something is
 # properly broken, and looping on it is no better than stopping.
 #
+# The window is tuned to separate the two by RATE, not by count, because
+# systemd counts every start -- including deliberate ones. At five-in-five-
+# minutes, saying "restart yourself" five times in a development session put
+# the unit into start-limit-hit: healthy, restarted on purpose, declared dead,
+# and announcing a failure that had not happened.
+#
+# A crash loop restarts every RestartSec, so eight starts take about 40s and
+# trip this. A voice restart costs ~20s -- speaking, exiting, RestartSec, four
+# seconds of imports, and the greeting -- so eight of them need over two
+# minutes and cannot trip a sixty-second window however hard you try.
+#
+# A slow crash loop escapes this, deliberately: if it survives long enough
+# between crashes it also plays the greeting each time, which is audible from
+# across the room and needs no unit file at all.
+#
 # Both keys have to live in [Unit]. systemd ignores them under [Service], which
 # it does quietly enough that the feature simply never happens.
-StartLimitIntervalSec=300
-StartLimitBurst=5
+StartLimitIntervalSec=60
+StartLimitBurst=8
 
 # Say so out loud when it does give up. Everything else Faethon announces goes
 # through Faethon, which is no use when Faethon is what failed.
