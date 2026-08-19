@@ -12,3 +12,8 @@ models/*
 !models/*.tflite
 *.wav
 !assets/*.wav
+# Recordings of the owner's actual voice, used to pin the wake-word thresholds
+# in the test suite. Not reproducible without them: a threshold chosen against
+# synthesised speech has already failed here once, scoring 0.84-0.91 on TTS and
+# 0.52-0.55 on a real voice.
+!training-samples/*.wav
