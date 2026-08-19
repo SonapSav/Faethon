@@ -67,12 +67,21 @@ class OpenRouterClient:
                     pass
         return BACKOFF_BASE * (2**attempt)
 
+    def get_json(self, path: str) -> dict[str, Any]:
+        """GET expecting a JSON response, with the same retry policy as POST."""
+        return self._json_request("GET", path, None)
+
     def post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         """POST expecting a JSON response."""
+        return self._json_request("POST", path, payload)
+
+    def _json_request(
+        self, method: str, path: str, payload: dict[str, Any] | None
+    ) -> dict[str, Any]:
         last_error: str = ""
         for attempt in range(MAX_ATTEMPTS):
             try:
-                r = self._client.post(path, json=payload)
+                r = self._client.request(method, path, json=payload)
             except httpx.RequestError as e:
                 last_error = f"{type(e).__name__}: {e}"
                 if attempt == MAX_ATTEMPTS - 1:

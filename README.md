@@ -299,6 +299,27 @@ costs is prompt size: ten turns adds roughly 250–700 tokens to every request,
 which is latency on the slowest leg. Clearing it is a way to make Faethon
 quicker as well as more private.
 
+## Checking your credit
+
+Say **"Hey Rhasspy, what's my OpenRouter credit balance"** and it answers
+**"Your OpenRouter balance is 1.77 dollars."** — always two decimals, and the
+word "dollars" rather than `$`, since a skill's reply goes straight to TTS with
+no model in between to tidy it up.
+
+The balance is a subtraction. `GET /credits` returns what was granted and what
+has been spent, not what is left:
+
+```json
+{"data": {"total_credits": 30, "total_usage": 28.228023831}}
+```
+
+The regex is deliberately loose about the spelling. "OpenRouter" is a coined
+word, so Whisper writes it however it sounds — OpenRouter, Open Router,
+OpenRooter, Open Rooter — and a pattern matching only the correct spelling
+fails in the worst way available: it falls through to the LLM, which cannot see
+your balance and will invent a plausible one. `open[\s.\-]*r[oeu]{1,3}ter`
+accepts the vowel cluster loosely instead.
+
 ## Writing a skill
 
 Drop a file in `src/faethon/skills/`. The registry finds it — no imports to
