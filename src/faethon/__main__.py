@@ -49,7 +49,10 @@ class Faethon:
         self.config = config
         self.client = client
         self.registry = Registry.discover()
-        self.memory = Memory(config.llm.history_turns)
+        self.memory = Memory(
+            config.llm.history_turns,
+            idle_timeout_sec=config.llm.history_idle_minutes * 60,
+        )
         self.router = Router(config, client, self.registry, self.memory)
         self.detector = WakeWordDetector(
             config.wake.model,
@@ -264,6 +267,11 @@ class Faethon:
             self.config.audio.frame_bytes,
         ) as read_frame:
             while self._running:
+                # Checked here rather than on a timer thread: this loop already
+                # ticks once per 80ms frame while idle, so the buffer is wiped
+                # at the deadline instead of merely being ignored by the next
+                # turn -- which would leave it sitting in RAM.
+                self.memory.expire_if_idle()
                 if self.detector.process(read_frame()) is not None:
                     self._converse(read_frame)
                     # Flush the wake model: the tail of Faethon's own reply may

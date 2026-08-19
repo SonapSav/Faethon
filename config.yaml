@@ -140,6 +140,26 @@ llm:
   temperature: 0.7
   history_turns: 10         # in-RAM conversational memory
 
+  # Minutes of silence after which the conversation is forgotten. Without a
+  # bound, context never ends: ask about France in the morning and "how big is
+  # it?" in the afternoon still answers about France -- wrong in a way nothing
+  # announces.
+  #
+  # Chosen from 71 real interactions on this Pi. The gaps between turns fall
+  # into two clumps with a trough between them:
+  #
+  #   under 1 min   53 gaps   one conversation, still going
+  #   1-5 min       10 gaps
+  #   5-10 min       1 gap    <- the trough
+  #   10-30 min      5 gaps   came back later, new subject
+  #   over 30 min    1 gap
+  #
+  # 10 minutes sits in that trough: it fires on 9% of gaps, separating "still
+  # talking" from "came back later" without cutting a live conversation short.
+  # 30 minutes would have fired once in seventy -- generous enough to barely
+  # do anything. 0 disables it.
+  history_idle_minutes: 10
+
   # DeepSeek V4 is a hybrid reasoning model and decides per-request whether to
   # think first. Thinking tokens are billed against max_tokens, so on a 100
   # token budget it can spend the whole allowance reasoning and return an empty

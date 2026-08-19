@@ -155,3 +155,57 @@ def test_shutdown_mid_conversation_stops_the_loop(rig):
     rig.faethon._handle_turn = fake_turn
     rig.faethon._converse(FakeStream(rig.events))
     assert rig.windows == [None]
+
+
+# -- idle expiry wiring ------------------------------------------------------
+
+
+def test_faethon_builds_memory_with_the_configured_idle_window(rig):
+    """The config value has to reach Memory in seconds, not minutes."""
+    from faethon.memory import Memory
+
+    cfg = rig.faethon.config
+    mem = Memory(
+        cfg.llm.history_turns,
+        idle_timeout_sec=cfg.llm.history_idle_minutes * 60,
+    )
+    assert mem.idle_timeout_sec == cfg.llm.history_idle_minutes * 60
+    assert mem.idle_timeout_sec > 60, "minutes were passed where seconds were wanted"
+
+
+def test_the_wake_loop_checks_for_expiry(rig, monkeypatch):
+    """Nothing else ticks while Faethon is idle.
+
+    If this call goes missing the buffer is never wiped on time, and nothing
+    fails -- it just quietly keeps yesterday's conversation.
+    """
+    from contextlib import contextmanager
+
+    from faethon import __main__ as main_mod
+
+    checks = []
+    frames = [0]
+
+    class FakeMemory:
+        def expire_if_idle(self):
+            checks.append(True)
+            return False
+
+    class FakeDetector:
+        def process(self, frame):
+            frames[0] += 1
+            if frames[0] >= 3:
+                rig.faethon._running = False
+            return None
+
+    @contextmanager
+    def fake_stream(device, rate, frame_bytes):
+        yield lambda: b"\x00\x00" * 1280
+
+    monkeypatch.setattr(main_mod.capture, "open_stream", fake_stream)
+    rig.faethon.memory = FakeMemory()
+    rig.faethon.detector = FakeDetector()
+    rig.faethon._listen_once()
+
+    assert len(checks) == frames[0], "expiry is not checked once per frame"
+    assert checks, "the wake loop never checked whether memory had gone stale"

@@ -93,6 +93,9 @@ class LLMConfig(BaseModel):
     max_tokens: int = 100
     temperature: float = 0.7
     history_turns: int = 10
+    #: Minutes of silence after which the conversation is forgotten. 0 keeps it
+    #: until a restart or "clear the buffer".
+    history_idle_minutes: float = Field(10.0, ge=0.0)
     system_prompt: str
     #: Let the model think before answering. Off by default: reasoning tokens
     #: come out of max_tokens, and on a spoken-reply budget they can consume

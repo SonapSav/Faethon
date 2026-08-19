@@ -279,6 +279,21 @@ skill that clears memory has to suppress its own recording too. Skills declare
 `clears_memory = True` and the router does both — skills hold no reference to
 memory themselves.
 
+It also forgets on its own after `llm.history_idle_minutes` of silence — 10 by
+default. Without a bound, context never ends: ask about France in the morning
+and "how big is it?" in the afternoon still answers about France, which is
+wrong in a way nothing announces. The window was picked from 71 real
+interactions here, whose gaps fall into two clumps with a trough between them —
+53 gaps under a minute (one conversation), then almost nothing between 5 and 10
+minutes, then a band of clearly separate sessions. 10 minutes sits in the
+trough; 30 would have fired once in seventy.
+
+The clock runs from the last turn, not the first, so a long conversation
+doesn't expire while it's still going. The check happens in the wake-word loop,
+which already ticks every 80 ms while idle — so the buffer is genuinely wiped
+at the deadline rather than merely ignored by the next turn, which would leave
+it sitting in RAM.
+
 The buffer costs about 3–5 kB of RAM whatever you do with it. What it actually
 costs is prompt size: ten turns adds roughly 250–700 tokens to every request,
 which is latency on the slowest leg. Clearing it is a way to make Faethon
@@ -475,8 +490,8 @@ while still correcting itself when genuinely wrong (7 × 8).
 - **A follow-up window has no cap on how long a conversation can run.** Anything
   that keeps producing speech Whisper will transcribe — a television in the same
   room — can hold one open indefinitely, and every turn is a paid API call.
-- **Memory is 10 turns and RAM-only.** It forgets on restart, deliberately.
-  Say **"clear the buffer"** to forget it sooner.
+- **Memory is 10 turns and RAM-only.** It forgets on restart, after 10 minutes
+  of silence, or when you say **"clear the buffer"**.
 - **One wake word at a time.**
 
 ## Tests
