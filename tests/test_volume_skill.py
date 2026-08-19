@@ -248,3 +248,50 @@ def test_a_broken_mixer_does_not_crash_the_turn(skill, monkeypatch):
 
     monkeypatch.setattr(volume_skill, "_amixer", boom)
     assert "couldn't change the volume" in skill.run(action="up")
+
+
+# -- percentages -------------------------------------------------------------
+# Faethon announces "Volume is set to 30%", so people say percentages back.
+# Read as a level, "30" clamps to 10 and every request lands on maximum --
+# which is exactly what happened in use. Whisper transcribes the sign
+# literally, so these are the real transcripts from that session.
+
+
+@pytest.mark.parametrize("heard,expected", [
+    ("Volume 20%.", "Volume is set to 20%."),
+    ("Set the volume to 20%.", "Volume is set to 20%."),
+    ("Set the volume to 30%.", "Volume is set to 30%."),
+    ("set the volume to 40%", "Volume is set to 40%."),
+    ("set the volume to 100%", "Volume is set to 100%."),
+])
+def test_a_spoken_percentage_is_not_read_as_a_level(skill, heard, expected):
+    assert say(skill, heard) == expected
+
+
+def test_the_word_percent_works_too(skill):
+    """Whisper writes the sign, but not always."""
+    assert say(skill, "set the volume to 60 percent") == "Volume is set to 60%."
+
+
+def test_a_bare_number_too_big_to_be_a_level_is_a_percentage(skill):
+    """Nobody means level 70, and clamping it to maximum is the bug this fixes."""
+    assert say(skill, "set the volume to 70") == "Volume is set to 70%."
+
+
+def test_the_two_scales_agree_where_they_overlap(skill):
+    """"7" and "70" are the same request said two ways."""
+    assert say(skill, "set the volume to 7") == say(skill, "set the volume to 70")
+
+
+def test_a_small_percentage_does_not_silence_it(skill):
+    """3% rounds to level 0 arithmetically, but the user asked for quiet, not
+    off. Only an explicit zero mutes."""
+    assert say(skill, "set the volume to 3%") == "Volume is set to 10%."
+    assert skill._state()[2] is False
+    assert say(skill, "set the volume to 0%") == "Volume is set to 0%, muted."
+    assert skill._state()[2] is True
+
+
+def test_the_model_can_still_pass_a_plain_level(skill):
+    """The tool-calling path sends 0-10, with no unit."""
+    assert skill.run(level=4) == "Volume is set to 40%."

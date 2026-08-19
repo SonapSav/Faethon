@@ -78,6 +78,25 @@ def _spoken(level: int) -> str:
     return f"Volume is set to {_percent(level)}."
 
 
+def _as_level(number: int, unit: str = "") -> int:
+    """Turn a spoken number into a level, whichever scale it was said in.
+
+    Faethon announces "Volume is set to 30%", so people say percentages back --
+    and "30" as a level would clamp to 10, i.e. every request landing on
+    maximum. A number is read as a percentage when it carries a unit, or when
+    it is simply too big to be a level: "70" can only mean 70%.
+
+    Any positive percentage gives at least level 1. Rounding 3% down to 0 would
+    mute the speaker when the user asked for something quiet, which is a
+    different thing and needs a different fix.
+    """
+    if unit or number > MAX_LEVEL:
+        if number <= 0:
+            return MIN_LEVEL
+        return max(1, min(MAX_LEVEL, round(number / PERCENT_PER_LEVEL)))
+    return max(MIN_LEVEL, min(MAX_LEVEL, number))
+
+
 def _find_control() -> tuple[str, str] | None:
     """First card with a playback volume control, as (card, control).
 
@@ -118,8 +137,11 @@ class VolumeSkill(Skill):
     patterns = [
         r"\b(?:turn (?:the )?)?volume (?P<action>up|down)\b",
         r"\bturn (?:it|the (?:volume|sound|music)) (?P<action>up|down)\b",
-        r"\bset (?:the )?volume to (?P<level>\d+)\b",
-        r"\bvolume (?:to |at )?(?P<level>\d+)\b",
+        # The unit group is what stops "set the volume to 30%" becoming
+        # level 30. Whisper transcribes the sign literally, and Faethon
+        # announces percentages, so people say them back.
+        r"\bset (?:the )?volume (?:to|at) (?P<level>\d+)\s*(?P<unit>%|percent)?",
+        r"\bvolume (?:to |at )?(?P<level>\d+)\s*(?P<unit>%|percent)?",
         r"\b(?P<action>louder)\b",
         r"\b(?P<action>quieter|softer)\b",
         r"\b(?P<action>unmute)\b",
@@ -142,7 +164,10 @@ class VolumeSkill(Skill):
                 "type": "integer",
                 "minimum": MIN_LEVEL,
                 "maximum": MAX_LEVEL,
-                "description": "Set an absolute level, 0 (muted) to 10 (maximum).",
+                "description": (
+                    "Set an absolute level, 0 (muted) to 10 (maximum). If the "
+                    "user asks for a percentage, pass the level: 30% is 3."
+                ),
             },
         },
         "required": [],
@@ -230,10 +255,9 @@ class VolumeSkill(Skill):
 
             if raw_level is not None:
                 try:
-                    target = int(raw_level)
+                    target = _as_level(int(raw_level), str(params.get("unit") or ""))
                 except (TypeError, ValueError):
                     return "I didn't catch what level you wanted."
-                target = max(MIN_LEVEL, min(MAX_LEVEL, target))
             elif action in ("up", "louder"):
                 target = current + 1
             elif action in ("down", "quieter", "softer"):

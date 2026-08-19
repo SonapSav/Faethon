@@ -221,6 +221,13 @@ scale is 0 to 10, where 0 is muted and 10 is the mixer's maximum. Also
 understands "louder", "quieter", "turn it up", "mute", "set the volume to 8",
 and "what's the volume".
 
+Percentages work as input too, and have to: Faethon announces "70%", so that's
+what people say back. "Set the volume to 30%" and "volume 3" mean the same
+thing, as do "to 7" and "to 70" — a number is read as a percentage when it
+carries a unit or is simply too big to be a level. Any positive percentage
+gives at least level 1, since rounding 3% down to silence would be a different
+thing from what was asked.
+
 Each change is spoken back as a percentage of the dial — one level is one
 tenth, so level 7 announces **"Volume is set to 70%."** and level 0 says
 **"Volume is set to 0%, muted."**, since 0% alone leaves it unclear whether the
