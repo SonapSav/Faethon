@@ -100,6 +100,21 @@ conversation:
   # sharply once Faethon is louder than you are at the microphone.
   barge_in_threshold: 0.1
 
+  # Say hello once when the service starts, so a restart is audible from the
+  # other side of the room. The sentence is pre-rendered to assets/greeting.wav
+  # rather than synthesised each boot, so it still plays when OpenRouter is
+  # down, out of credit, or the wifi is not up yet -- which is when knowing the
+  # service came back matters most. Reword it in scripts/make_greeting.py and
+  # re-run that to regenerate.
+  #
+  # Played before the microphone is opened. The current wording scores 0.0001
+  # on the wake model through the speaker and mic, so it is the words that make
+  # it safe, not the ordering -- an earlier draft opening "Hi, I am Rhasspy"
+  # measured 0.5036, still under the 0.7 wake threshold but five thousand times
+  # higher and well over the 0.1 barge-in uses. Keep the assistant's name out
+  # of the greeting, or it can wake itself.
+  greet_on_start: true
+
 models:
   # Turbo has a distilled decoder: markedly faster and 2.25x cheaper, with a
   # small accuracy cost that doesn't show up on short English commands.

@@ -209,3 +209,75 @@ def test_the_wake_loop_checks_for_expiry(rig, monkeypatch):
 
     assert len(checks) == frames[0], "expiry is not checked once per frame"
     assert checks, "the wake loop never checked whether memory had gone stale"
+
+
+# -- startup greeting --------------------------------------------------------
+
+
+class FakeAsset:
+    """Stands in for the greeting Path. Path itself takes no attributes."""
+
+    name = "greeting.wav"
+
+    def __init__(self, exists: bool) -> None:
+        self._exists = exists
+
+    def exists(self) -> bool:
+        return self._exists
+
+
+def test_the_greeting_plays_before_the_microphone_opens(rig, monkeypatch):
+    """Load-bearing ordering, not tidiness.
+
+    The greeting says the assistant's own name, and measured through the
+    speaker and microphone it scores 0.5036 on the wake model -- under the 0.7
+    wake threshold, but far over the 0.1 barge-in uses. If it played while the
+    capture stream was open, Faethon would hear itself say its name on every
+    single start.
+    """
+    from contextlib import contextmanager
+
+    from faethon import __main__ as main_mod
+
+    order = []
+
+    @contextmanager
+    def fake_stream(device, rate, frame_bytes):
+        order.append("mic opened")
+        rig.faethon._running = False
+        yield lambda: b"\x00\x00" * 1280
+
+    monkeypatch.setattr(main_mod.capture, "open_stream", fake_stream)
+    monkeypatch.setattr(
+        main_mod.playback, "play_wav",
+        lambda path, device: order.append(f"played {path.name}"),
+    )
+    monkeypatch.setattr(main_mod, "GREETING_SOUND", FakeAsset(exists=True))
+
+    rig.faethon.run()
+    assert order == ["played greeting.wav", "mic opened"], order
+
+
+def test_the_greeting_can_be_turned_off(rig, monkeypatch):
+    from faethon import __main__ as main_mod
+
+    played = []
+    monkeypatch.setattr(
+        main_mod.playback, "play_wav", lambda path, device: played.append(path)
+    )
+    rig.faethon.config.conversation.greet_on_start = False
+    rig.faethon._greet()
+    assert played == []
+
+
+def test_a_missing_greeting_file_is_survivable(rig, monkeypatch):
+    """A fresh clone before make_greeting.py has been run."""
+    from faethon import __main__ as main_mod
+
+    played = []
+    monkeypatch.setattr(
+        main_mod.playback, "play_wav", lambda path, device: played.append(path)
+    )
+    monkeypatch.setattr(main_mod, "GREETING_SOUND", FakeAsset(exists=False))
+    rig.faethon._greet()
+    assert played == []

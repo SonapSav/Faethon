@@ -320,6 +320,29 @@ fails in the worst way available: it falls through to the LLM, which cannot see
 your balance and will invent a plausible one. `open[\s.\-]*r[oeu]{1,3}ter`
 accepts the vowel cluster loosely instead.
 
+## Starting up
+
+When the service starts, Faethon says **"Hi, I am up and running! Say my name
+whenever you need me."** once — so a restart is audible from across the room,
+and anyone in the house learns there's a wake word without being told.
+
+It's pre-rendered to `assets/greeting.wav` rather than synthesised on each
+boot. A fixed sentence needs no network round-trip, and this way it still
+plays when OpenRouter is unreachable or out of credit — which is exactly when
+knowing the service came back is worth most. Reword it in
+`scripts/make_greeting.py` and re-run that; `greet_on_start: false` turns it
+off.
+
+**Keep the assistant's name out of the greeting.** The current wording scores
+**0.0001** on the wake model through the speaker and mic. An earlier draft
+opened "Hi, I am Rhasspy" and scored **0.5036** — still under the 0.7 wake
+threshold, but five thousand times higher and well above the 0.1 that barge-in
+listens at. Saying the name is most of saying the wake word.
+
+The greeting also plays before the microphone is opened, which costs nothing
+and means a future rewording can't wake Faethon up at every start. A test pins
+the margin either way.
+
 ## Restarting it
 
 Say **"Hey Rhasspy, restart yourself"** — also "restart the assistant",

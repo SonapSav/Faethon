@@ -168,3 +168,45 @@ def test_a_failure_here_does_not_print_the_api_key(config):
     """
     assert "sk-or" not in repr(config)
     assert "sk-or" not in str(config.settings)
+
+
+# -- the startup greeting ----------------------------------------------------
+
+
+GREETING = PROJECT_ROOT / "assets" / "greeting.wav"
+
+
+def test_the_greeting_stays_under_the_wake_threshold(detector, config):
+    """Saying the assistant's name is most of saying the wake word.
+
+    The current wording avoids it and scores ~0.0001. An earlier draft opening
+    "Hi, I am Rhasspy" measured 0.5036 through the speaker and mic. This test
+    is what catches a rewording that drifts back toward the wake phrase --
+    which would otherwise only show up as Faethon waking itself on every start.
+    """
+    if not GREETING.exists():
+        pytest.skip("greeting not rendered; run scripts/make_greeting.py")
+
+    with wave.open(str(GREETING)) as w:
+        raw = w.readframes(w.getnframes())
+        rate = w.getframerate()
+
+    # The file is at the TTS provider's rate; the model wants 16 kHz.
+    audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
+    step = rate / config.audio.sample_rate
+    idx = (np.arange(int(len(audio) / step)) * step).astype(int)
+    resampled = audio[idx].astype(np.int16)
+
+    detector.reset(arm_refractory=False)
+    frame = config.audio.frame_bytes
+    pcm = resampled.tobytes()
+    peak = max(
+        max(detector._model.predict(
+            np.frombuffer(pcm[i:i + frame], dtype=np.int16)).values() or [0.0])
+        for i in range(0, len(pcm) - frame, frame)
+    )
+    assert peak < config.wake.threshold, (
+        f"the greeting scores {peak:.4f} against a wake threshold of "
+        f"{config.wake.threshold} -- Faethon would wake itself on startup if "
+        "this were ever played with the microphone open"
+    )

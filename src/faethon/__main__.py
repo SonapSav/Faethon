@@ -42,6 +42,11 @@ log = logging.getLogger("faethon")
 
 ACK_SOUND = ASSETS_DIR / "ack.wav"      # "go ahead"
 CLOSE_SOUND = ASSETS_DIR / "done.wav"   # "we're finished; wake me again"
+# Pre-rendered rather than synthesised on each boot: a fixed sentence needs no
+# network round-trip, and this way it still plays when OpenRouter is down, out
+# of credit, or the wifi is not up -- when knowing the service came back is
+# worth most. Regenerate with scripts/make_greeting.py.
+GREETING_SOUND = ASSETS_DIR / "greeting.wav"
 
 
 class Faethon:
@@ -251,7 +256,30 @@ class Faethon:
 
     # -- main loop -------------------------------------------------------
 
+    def _greet(self) -> None:
+        """Say hello once, before the microphone is ever opened.
+
+        The current wording scores 0.0001 on the wake model through the speaker
+        and mic, so the ordering is not what makes it safe -- the words are. An
+        earlier draft said "Hi, I am Rhasspy", which scored 0.5036: still under
+        the 0.7 wake threshold, but five thousand times higher and well over
+        the 0.1 barge-in listens at.
+
+        So this stays first because it costs nothing and the margin belongs to
+        the sentence rather than to the design. Reword the greeting to include
+        the assistant's name and it comes straight back.
+        """
+        if not self.config.conversation.greet_on_start:
+            return
+        if not GREETING_SOUND.exists():
+            log.warning(
+                "no greeting at %s -- run scripts/make_greeting.py", GREETING_SOUND
+            )
+            return
+        playback.play_wav(GREETING_SOUND, self.config.audio.output_device)
+
     def run(self) -> None:
+        self._greet()
         log.info("Faethon is listening -- say the wake word")
         while self._running:
             try:

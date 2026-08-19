@@ -73,6 +73,8 @@ class ConversationConfig(BaseModel):
     #: through the speaker and mic at equal loudness, the wake word scored
     #: 0.368 while Faethon talking over it scored 0.0002.
     barge_in_threshold: float = Field(0.1, gt=0.0, le=1.0)
+    #: Say hello once when the service starts, so a restart is audible.
+    greet_on_start: bool = True
 
 
 class ModelsConfig(BaseModel):
