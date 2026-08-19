@@ -288,3 +288,16 @@ def test_a_missing_greeting_file_is_survivable(rig, monkeypatch):
     monkeypatch.setattr(main_mod, "GREETING_SOUND", FakeAsset(exists=False))
     rig.faethon._greet()
     assert played == []
+
+
+def test_the_turn_line_reports_this_turn_not_just_the_running_total():
+    """Printing only the process total made every turn look dearer than the
+    last, which reads exactly like context growing without bound. It isn't:
+    the buffer evicts at history_turns and the prompt plateaus."""
+    import inspect
+
+    from faethon.__main__ import Faethon
+
+    src = inspect.getsource(Faethon._handle_turn)
+    assert "spent_before" in src, "no per-turn cost is captured"
+    assert "this turn" in src, "the log line does not distinguish the two"

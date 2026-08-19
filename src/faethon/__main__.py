@@ -147,6 +147,7 @@ class Faethon:
         # Clock starts when the user stops talking -- that's the silence they
         # actually perceive as lag.
         started = time.monotonic()
+        spent_before = self.client.spent
         audio_sec = len(pcm) / 2 / self.config.audio.sample_rate
 
         try:
@@ -191,10 +192,15 @@ class Faethon:
             self.announcer.recovered()
 
         total = time.monotonic() - started
+        # This turn's cost, then the session's. Printing only the running total
+        # here made every turn look more expensive than the last, which reads
+        # exactly like context growing without bound.
         log.info(
-            "turn: %.1fs audio | stt %.2fs | reply+speech %.2fs | total %.2fs%s | $%.5f",
+            "turn: %.1fs audio | stt %.2fs | reply+speech %.2fs | total %.2fs%s "
+            "| $%.5f this turn, $%.5f session (%d turn(s) held)",
             audio_sec, t_stt, total - t_stt, total,
-            " | interrupted" if spoken.interrupted else "", self.client.spent,
+            " | interrupted" if spoken.interrupted else "",
+            self.client.spent - spent_before, self.client.spent, len(self.memory),
         )
         if not spoken:
             log.info("nothing to say")

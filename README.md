@@ -485,8 +485,15 @@ with by hand.
 Faethon logs a breakdown every turn, timed from the moment you stop speaking:
 
 ```
-turn: 2.3s audio | stt 0.81s | reply+speech 2.66s | total 3.47s | $0.00004
+turn: 2.3s audio | stt 0.81s | reply+speech 2.66s | total 3.47s | $0.00004 this turn, $0.00021 session (4 turn(s) held)
 ```
+
+The two figures are this turn and the process total; the count is how much
+history is being resent. Cost per turn rises through a conversation because
+every turn resends the whole history — measured at 181 tokens on the first
+turn and 529 by the eleventh, roughly 3× — and then plateaus, because the
+buffer starts evicting at `history_turns`. "Clear the buffer" puts it back to
+the floor immediately.
 
 That line is a good turn from 2026-08-17, not a promise. Both cloud legs vary
 a great deal more than the Pi does: measured 2026-08-19, STT ran a median of
