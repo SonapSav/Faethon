@@ -134,6 +134,29 @@ conversation:
   # of the greeting, or it can wake itself.
   greet_on_start: true
 
+turn_log:
+  # One line per turn in /var/lib/faethon/turns.jsonl, so the next threshold
+  # can be measured rather than guessed.
+  #
+  # Every number here that turned out right was measured -- the wake threshold
+  # from scoring a real voice, the idle window from plotting 71 real gaps, the
+  # barge-in threshold from a mixing experiment -- and each of those datasets
+  # had to be collected by hand for the occasion. The ones that were not
+  # measured show it: the conversation cap is 20 turns and 5 minutes because
+  # three conversations happened to be in the journal at the time.
+  #
+  # METADATA ONLY. Routes, latencies, costs, text lengths -- never transcripts.
+  # journald already keeps the words, and whether it should is a live decision;
+  # recording them again here would answer it by accident.
+  #
+  # Read it with: uv run python scripts/turns.py [--days N]
+  enabled: true
+
+  # Rotates one generation back at this size. Roughly 200 bytes a turn, so
+  # years before it matters -- but an SD card is the part of a Pi that wears
+  # out, and a log nobody prunes is a slow way to fill one. 0 never rotates.
+  max_mb: 5
+
 credit:
   # Warn before the account runs dry. At zero every leg stops -- no
   # transcription, no thinking, no speech -- so the failure is total silence

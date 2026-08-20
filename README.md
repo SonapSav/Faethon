@@ -434,6 +434,43 @@ The greeting also plays before the microphone is opened, which costs nothing
 and means a future rewording can't wake Faethon up at every start. A test pins
 the margin either way.
 
+## The turn log
+
+One line per turn in `/var/lib/faethon/turns.jsonl`, so the next threshold can
+be measured rather than guessed.
+
+```bash
+uv run python scripts/turns.py --days 7
+```
+
+```
+142 turns over 71.3 hours
+
+where they went
+  llm                           83    58%
+  regex:get_time                21    15%
+  ...
+
+latency, seconds
+  stt      median   1.87   p90   4.10   max  19.41
+  ...
+```
+
+Every number in this project that turned out right was measured — the wake
+threshold by scoring a real voice, the idle window by plotting 71 real gaps,
+the barge-in threshold by a mixing experiment. Each of those datasets had to be
+manufactured by hand for the occasion. The ones that *weren't* measured show
+it: the conversation cap is 20 turns and 5 minutes because three conversations
+happened to be in the journal when it was written.
+
+**Metadata only — routes, latencies, costs, text lengths, never transcripts.**
+journald already keeps the words, and whether it should is a live decision;
+recording them a second time here would answer it by accident.
+
+It rotates one generation back at `max_mb`, because an SD card is the part of a
+Pi that wears out. And it never raises: a log that can break a turn is worse
+than no log.
+
 ## Timers
 
 ```

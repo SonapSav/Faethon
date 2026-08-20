@@ -36,6 +36,7 @@ from .providers.client import OpenRouterClient, OpenRouterError
 from .router import Router
 from .skills.registry import Registry
 from .speech import Spoken, speak_streaming
+from .turnlog import TurnLog
 from .status import (
     LOW_CREDIT,
     MIC_BACK,
@@ -93,6 +94,9 @@ class Faethon:
         #: silently, leaving the journal ending on an error from long before
         #: everything started working.
         self._capture_failures = 0
+        self.turn_log = TurnLog(
+            config.turn_log.enabled, int(config.turn_log.max_mb * 1_000_000)
+        )
         self.credit = CreditWatch(
             config.credit.warn_below,
             config.credit.check_every_minutes * 60,
@@ -154,7 +158,7 @@ class Faethon:
             # Nothing to say it with -- log loudly, stay alive.
             log.error("tts failed: %s", e)
 
-    def _handle_turn(self, read_frame, start_timeout_ms=None) -> bool:
+    def _handle_turn(self, read_frame, start_timeout_ms=None) -> bool:  # noqa: C901
         """One exchange: record, transcribe, answer.
 
         Returns whether Faethon said anything. That is the signal `_converse`

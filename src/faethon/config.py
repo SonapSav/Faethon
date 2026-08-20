@@ -89,6 +89,21 @@ class ConversationConfig(BaseModel):
     greet_on_start: bool = True
 
 
+class TurnLogConfig(BaseModel):
+    """A line per turn, so future thresholds can be measured.
+
+    Metadata only -- routes, latencies, costs, text lengths. Never transcripts:
+    journald already keeps those and whether it should is a live decision, so
+    recording them again here would answer it by accident.
+    """
+
+    enabled: bool = True
+    #: Rotate one generation back at this size. An SD card is the part of a Pi
+    #: that wears out, and roughly 200 bytes a turn means years before this
+    #: matters -- but unbounded is unbounded.
+    max_mb: float = Field(5.0, ge=0.0)
+
+
 class CreditConfig(BaseModel):
     """Warning before the account runs dry.
 
@@ -176,6 +191,7 @@ class Config(BaseModel):
     utterance: UtteranceConfig
     conversation: ConversationConfig = ConversationConfig()
     credit: CreditConfig = CreditConfig()
+    turn_log: TurnLogConfig = TurnLogConfig()
     models: ModelsConfig
     stt: STTConfig = STTConfig()
     llm: LLMConfig

@@ -53,6 +53,9 @@ class Router:
         self._skip_record = False
         #: A skill's after_reply, waiting for the reply to finish being spoken.
         self._pending_action: Callable[[], None] | None = None
+        #: Which path the current turn took, for the turn log. Set here rather
+        #: than inferred by the caller, which cannot see the difference.
+        self.route: str | None = None
 
     def handle(self, text: str) -> str:
         """Return what Faethon should say in response to `text`."""
@@ -88,6 +91,7 @@ class Router:
                 spoken = skill.unavailable_reason
             else:
                 log.info("regex -> %s(%s)", skill.name, params)
+                self.route = f"regex:{skill.name}"
                 spoken = self._run(skill.name, params)
             # Recorded before the yield, not after. Barge-in closes this
             # generator at the yield, and an exchange the user actually heard
@@ -100,6 +104,7 @@ class Router:
 
         from .speech import sentence_chunks  # local: avoids a circular import
 
+        self.route = "llm"
         messages = self.memory.messages(self._system_prompt(), text)
         reply = llm_mod.complete_streaming(
             self.client,
@@ -138,6 +143,7 @@ class Router:
             # No content streamed: the model chose a tool instead.
             for call in reply.tool_calls:
                 log.info("tool -> %s(%s)", call.name, call.arguments)
+                self.route = f"tool:{call.name}"
                 result = self._run(call.name, call.arguments)
                 if result:
                     said.append(result)
@@ -250,6 +256,7 @@ class Router:
         """
         self._skip_record = False
         self._pending_action = None
+        self.route = None
 
     def take_pending_action(self) -> Callable[[], None] | None:
         """Hand back the deferred action, if a skill left one, and forget it.
