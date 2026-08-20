@@ -596,6 +596,13 @@ be relaxed and nothing is written inside the checkout. Writes are atomic —
 a crash mid-write would otherwise leave JSON that fails to parse, turning a
 lost timer into a permanently broken one.
 
+An announcement drains the microphone afterwards, the same way a spoken reply
+does. Faethon talks over a live mic either way, and without the drain the wake
+detector spends the next two seconds chewing its own voice instead of hearing
+the room — measured at **2.04s of backlog** after a timer fires, which is
+exactly when someone says "cancel" or "set another". With the drain it reads at
+0.96× real time, i.e. live.
+
 Timers are also the reason skills have a `tick()` hook: called while idle and
 between turns, returning a sentence to speak or nothing. Returning text rather
 than speaking keeps skills free of any audio dependency, exactly as `run()`

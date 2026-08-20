@@ -315,7 +315,7 @@ class Faethon:
             # Also between turns: the wake loop does not run during a
             # conversation, and one can now last five minutes. Worst case a
             # timer is one turn late rather than a whole conversation late.
-            self._tick_skills()
+            self._tick_skills(stream)
 
             turns += 1
             reason = self._over_budget(turns, time.monotonic() - started)
@@ -365,7 +365,7 @@ class Faethon:
             log.debug("credit check failed: %s", e)
             return None
 
-    def _tick_skills(self) -> None:
+    def _tick_skills(self, stream) -> None:
         """Give every skill a chance to speak without being asked.
 
         Cheap by contract -- called once per audio frame while idle -- and the
@@ -381,6 +381,17 @@ class Faethon:
                 continue
             if said:
                 self._announce(said)
+                # Faethon has just talked over a live microphone, exactly as it
+                # does during a turn -- and the turn path drains for this
+                # reason. Without it the wake detector spends the next two
+                # seconds chewing the announcement instead of hearing the room,
+                # measured at 2.04s of backlog after a timer fires. Which is
+                # precisely when someone says "cancel" or "set another".
+                dropped = stream.drain()
+                log.debug(
+                    "dropped %.1fs of self-audio after announcing",
+                    dropped / 2 / self.config.audio.sample_rate,
+                )
                 return
 
     def _announce(self, text: str) -> None:
@@ -453,7 +464,7 @@ class Faethon:
                 # at the deadline instead of merely being ignored by the next
                 # turn -- which would leave it sitting in RAM.
                 self.memory.expire_if_idle()
-                self._tick_skills()
+                self._tick_skills(read_frame)
                 frame = read_frame()
                 if not opened:
                     opened = True

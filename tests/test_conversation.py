@@ -425,3 +425,51 @@ def test_a_capped_conversation_leaves_the_follow_up_window_shut(rig):
     rig.faethon.config.conversation.max_turns = 2
     rig.script([True] * 10)
     assert rig.windows == [None, 5000]
+
+
+def test_an_announcement_drains_the_microphone(rig, monkeypatch):
+    """Faethon talks over a live mic when a timer fires, exactly as it does
+    during a turn -- and the turn path drains for that reason.
+
+    Measured before this existed: a timer announcement left 2.04 seconds of
+    backlog, so the wake detector spent that long chewing Faethon's own voice
+    instead of hearing the room. Which is precisely when someone says "cancel"
+    or "set another".
+    """
+    from faethon import __main__ as main_mod
+    from faethon.skills.base import Skill
+
+    class Noisy(Skill):
+        name, tag, description = "noisy", "test", "speaks unprompted"
+
+        def tick(self):
+            return "your pasta timer is up"
+
+        def run(self, **params):
+            return ""
+
+    events: list = []
+    monkeypatch.setattr(main_mod.playback, "play_wav", lambda p, d: events.append("chime"))
+    monkeypatch.setattr(Faethon, "_speak", lambda self, text: events.append("spoke"))
+    rig.faethon.registry = Registry([Noisy()])
+
+    class Stream:
+        def __call__(self): return b"\x00\x00" * 1280
+        def drain(self): events.append("drained"); return 32000
+
+    rig.faethon._tick_skills(Stream())
+    assert events == ["chime", "spoke", "drained"], events
+
+
+def test_a_quiet_tick_does_not_drain(rig):
+    """Nothing was said, so there is nothing of Faethon's in the buffer -- and
+    draining would throw away audio the wake detector needs."""
+    drained = []
+
+    class Stream:
+        def __call__(self): return b"\x00\x00" * 1280
+        def drain(self): drained.append(1); return 0
+
+    rig.faethon.registry = Registry([])
+    rig.faethon._tick_skills(Stream())
+    assert drained == []
