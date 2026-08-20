@@ -437,9 +437,9 @@ the margin either way.
 ## Weather
 
 ```
-"Hey Rhasspy, what's the weather"       It's 35 and clear in Dubai, feels like 44, with a high of 38.
-"Will it rain tomorrow?"                Yes, an 80 percent chance of rain in Dubai tomorrow.
-"Do I need an umbrella?"                No rain expected in Dubai today.
+"Hey Rhasspy, what's the weather"       It's 35 and clear in Abu Dhabi, feels like 42, with a high of 43.
+"Will it rain tomorrow?"                No rain expected in Abu Dhabi tomorrow.
+"Do I need an umbrella?"                No rain expected in Abu Dhabi today.
 "What's the weather in Paris?"          It's 24 and overcast in Paris, with a high of 25.
 ```
 
@@ -467,8 +467,8 @@ matter of opinion and of who is asking.
 
 Two or three facts, never more: TTS bills per character, and the follow-up
 window means "and tomorrow?" is one sentence away. How it *feels* is mentioned
-only when that differs by four degrees or more — in Dubai in August the gap is
-routinely ten. Forecasts are cached for ten minutes, because a conversation
+only when that differs by four degrees or more — here in August the gap is
+routinely seven. Forecasts are cached for ten minutes, because a conversation
 about the weather otherwise fetches the same hourly data three times.
 
 ## The turn log

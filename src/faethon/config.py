@@ -96,10 +96,10 @@ class WeatherConfig(BaseModel):
     on any map; four decimal places is far more precision than a forecast has.
     """
 
-    latitude: float = Field(25.2048, ge=-90.0, le=90.0)
-    longitude: float = Field(55.2708, ge=-180.0, le=180.0)
-    #: What Faethon calls it out loud.
-    place_name: str = "Dubai"
+    latitude: float = Field(24.4330, ge=-90.0, le=90.0)
+    longitude: float = Field(54.6511, ge=-180.0, le=180.0)
+    #: What Faethon calls it out loud, not a lookup key.
+    place_name: str = "Abu Dhabi"
     #: "metric" for Celsius, "imperial" for Fahrenheit.
     units: Literal["metric", "imperial"] = "metric"
 
