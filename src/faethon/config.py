@@ -77,6 +77,26 @@ class ConversationConfig(BaseModel):
     greet_on_start: bool = True
 
 
+class CreditConfig(BaseModel):
+    """Warning before the account runs dry.
+
+    At zero every leg stops -- no transcription, no thinking, no speech -- so
+    the failure is total silence, and the only thing still able to report it is
+    a pre-rendered clip.
+    """
+
+    #: USD. 0 disables the warning.
+    #:
+    #: COUPLED TO THE AUDIO: the clip says "below half a dollar", so changing
+    #: this means re-rendering it. scripts/make_speech.py holds the wording and
+    #: a test pins the two together.
+    warn_below: float = Field(0.50, ge=0.0)
+    #: How often to look, at most. Checked after a turn rather than in the wake
+    #: loop: a /credits call takes 250-450ms, which in that loop is three or
+    #: four frames of deafness and a real chance of missing a wake word.
+    check_every_minutes: float = Field(60.0, gt=0.0)
+
+
 class ModelsConfig(BaseModel):
     stt: str
     llm: str
@@ -143,6 +163,7 @@ class Config(BaseModel):
     wake: WakeConfig
     utterance: UtteranceConfig
     conversation: ConversationConfig = ConversationConfig()
+    credit: CreditConfig = CreditConfig()
     models: ModelsConfig
     stt: STTConfig = STTConfig()
     llm: LLMConfig

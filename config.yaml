@@ -115,6 +115,24 @@ conversation:
   # of the greeting, or it can wake itself.
   greet_on_start: true
 
+credit:
+  # Warn before the account runs dry. At zero every leg stops -- no
+  # transcription, no thinking, no speech -- so the failure is total silence
+  # and the only thing still able to report it is a pre-rendered clip.
+  #
+  # COUPLED TO THE AUDIO: the clip says "below half a dollar", which is only
+  # true because this is 0.50. Change it and you must reword and re-render
+  # scripts/make_speech.py; a test pins the two together so you can't forget.
+  #
+  # 0 disables the warning.
+  warn_below: 0.50
+
+  # At most this often, and only after a turn -- never in the wake loop, where
+  # a 250-450ms /credits call is three or four frames of deafness and a real
+  # chance of missing a wake word. An idle house never checks, which is fine:
+  # nobody talking means nobody spending.
+  check_every_minutes: 60
+
 models:
   # Turbo has a distilled decoder: markedly faster and 2.25x cheaper, with a
   # small accuracy cost that doesn't show up on short English commands.

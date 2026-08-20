@@ -22,6 +22,8 @@ Two behaviours matter as much as the clips:
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +38,7 @@ NO_NETWORK = "no-network"
 NO_CREDIT = "no-credit"
 NO_MIC = "no-mic"
 MIC_BACK = "mic-back"
+LOW_CREDIT = "low-credit"
 
 #: 402 is the whole reason these are separate clips: "check the router" and
 #: "top up the account" are different instructions, and guessing wrong sends
@@ -91,6 +94,63 @@ class Announcer:
             self._said.discard(status)
             return True
         return False
+
+
+class CreditWatch:
+    """Warns once when the account balance crosses a threshold going down.
+
+    Its suppression cannot use the Announcer's, and that is the whole reason it
+    exists as a separate thing. `recovered()` clears every status and is called
+    after each successful turn -- so a credit warning routed through it would be
+    un-suppressed within seconds and fire again on every check, which is the
+    nagging status.py was written to avoid.
+
+    So: warn once per crossing, and re-arm only when the balance climbs back
+    above the line. That only happens on a deliberate top-up, so it cannot
+    flap.
+
+    The balance lookup is injected rather than taken as a client, so this is
+    testable without a network, and so a failing lookup is this class's problem
+    rather than the caller's.
+    """
+
+    def __init__(
+        self,
+        warn_below: float,
+        check_every_sec: float,
+        balance: Callable[[], float | None],
+        now: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.warn_below = warn_below
+        self.check_every_sec = check_every_sec
+        self._balance = balance
+        self._now = now
+        self._warned = False
+        #: Far enough in the past that the first turn checks.
+        self._last_check = now() - check_every_sec
+
+    def check(self) -> bool:
+        """Look if it is time to. True means say something now."""
+        if self.warn_below <= 0:
+            return False
+        if self._now() - self._last_check < self.check_every_sec:
+            return False
+        self._last_check = self._now()
+
+        balance = self._balance()
+        if balance is None:
+            # Could not be read. A network problem is already announced by
+            # whichever leg failed; a second voice for the same outage is noise.
+            return False
+
+        if balance > self.warn_below:
+            self._warned = False        # topped up: re-arm
+            return False
+        if self._warned:
+            return False
+        self._warned = True
+        log.info("credit low: $%.2f, below $%.2f", balance, self.warn_below)
+        return True
 
 
 class SilenceWatch:

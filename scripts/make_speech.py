@@ -34,6 +34,9 @@ PHRASES = {
     # means top up the account. Hearing the wrong one sends you the wrong way.
     "no-network": "I can't reach the network right now.",
     "no-credit": "My OpenRouter credit has run out.",
+    # Wording is coupled to credit.warn_below in config.yaml -- "half a dollar"
+    # is only true because the threshold is 0.50. A test pins them together.
+    "low-credit": "Your account is below half a dollar.",
     "no-mic": "I can't hear the microphone.",
     # Only played to someone who heard the failure. Announcing that the
     # microphone is back, to a person who never knew it had gone, is noise.

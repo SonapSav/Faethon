@@ -344,6 +344,7 @@ with no network, key, credit or model involved:
 | "My OpenRouter credit has run out." | HTTP 402 | top up |
 | "I can't hear the microphone." | `CaptureError`, or minutes of digital silence | check the mic |
 | "I can hear you again." | capture recovered, and the failure had been announced | nothing |
+| "Your account is below half a dollar." | balance crossed `credit.warn_below` | top up |
 | "Something has gone wrong and I have stopped." | the service gave up | `journalctl -u faethon` |
 
 Credit and network are separate clips because the fixes are different, and
@@ -359,6 +360,17 @@ still peaks at 2–4 per frame.
 Each status is announced once and then suppressed until something works again —
 an outage lasts as long as it lasts, and repeating it every attempt turns
 information into nagging.
+
+The credit warning is the one that fires *before* anything breaks. At zero
+every leg stops at once, so the failure is total silence — the useful moment is
+earlier. It says only that the balance is low; ask **"what's my credit
+balance"** for the figure, which the skill already answers live.
+
+Its suppression is deliberately not the Announcer's. `recovered()` clears every
+status and runs after each successful turn, so a credit warning routed through
+it would be un-suppressed within seconds and repeat on every check. Instead it
+warns once per crossing and re-arms only when the balance climbs back — which
+only a top-up does, so it can't flap.
 
 **Recovery is announced too**, which matters more than it sounds. A USB
 microphone can take minutes to appear after a cold boot — measured at 2m45s

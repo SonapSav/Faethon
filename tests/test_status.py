@@ -233,3 +233,112 @@ def test_forgetting_one_status_leaves_the_others_alone(announcer):
     announcer.forget(NO_MIC)
     assert announcer.say(NO_MIC) is True, "should be sayable again"
     assert announcer.say(NO_NETWORK) is False, "unrelated status was cleared"
+
+
+# -- running out of credit ---------------------------------------------------
+# At zero every leg stops: no transcription, no thinking, no speech. The
+# failure is total silence, and the only thing able to report it is a
+# pre-rendered clip -- so the useful moment is before, not after.
+
+
+class Clock:
+    def __init__(self, t: float = 0.0) -> None:
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+    def advance(self, seconds: float) -> None:
+        self.t += seconds
+
+
+def watch(balance, warn_below=0.50, every=3600.0):
+    from faethon.status import CreditWatch
+
+    clock = Clock()
+    box = {"v": balance}
+    w = CreditWatch(warn_below, every, lambda: box["v"], now=clock)
+    return w, clock, box
+
+
+def test_it_warns_when_the_balance_crosses_the_line():
+    w, _, _ = watch(0.40)
+    assert w.check() is True
+
+
+def test_it_says_nothing_above_the_line():
+    w, clock, _ = watch(1.71)
+    assert w.check() is False
+
+
+def test_it_warns_once_not_on_every_check():
+    """The whole point of status.py is that information doesn't become
+    nagging. This one cannot use the Announcer's suppression -- recovered()
+    clears every status after each successful turn, so a credit warning routed
+    through it would be un-suppressed within seconds."""
+    w, clock, _ = watch(0.40)
+    assert w.check() is True
+    for _ in range(5):
+        clock.advance(3601)
+        assert w.check() is False
+
+
+def test_topping_up_re_arms_it():
+    """Only a deliberate top-up raises the balance, so this cannot flap."""
+    w, clock, box = watch(0.40)
+    assert w.check() is True
+    box["v"] = 10.00
+    clock.advance(3601)
+    assert w.check() is False
+    box["v"] = 0.30
+    clock.advance(3601)
+    assert w.check() is True
+
+
+def test_it_does_not_check_more_often_than_asked():
+    """A /credits call per turn is latency and traffic for a number that moves
+    by fractions of a cent."""
+    calls = []
+    from faethon.status import CreditWatch
+
+    clock = Clock()
+    w = CreditWatch(0.50, 3600.0, lambda: calls.append(1) or 0.40, now=clock)
+    w.check()
+    for _ in range(10):
+        clock.advance(60)
+        w.check()
+    assert len(calls) == 1
+
+
+def test_a_failed_lookup_says_nothing():
+    """A network problem is already announced by whichever leg failed. A second
+    voice for the same outage is noise."""
+    w, clock, _ = watch(None)
+    assert w.check() is False
+
+
+def test_zero_disables_it():
+    w, clock, _ = watch(0.01, warn_below=0.0)
+    assert w.check() is False
+
+
+def test_it_checks_on_the_very_first_turn():
+    """Otherwise a Pi booted with an empty account waits an hour to say so."""
+    w, _, _ = watch(0.10)
+    assert w.check() is True
+
+
+def test_the_wording_matches_the_threshold():
+    """The clip says "below half a dollar", which is only true because the
+    threshold is 0.50. Change one and the other has to be re-rendered.
+    """
+    from pathlib import Path
+
+    from faethon.config import PROJECT_ROOT, load_config
+
+    assert load_config().credit.warn_below == 0.50, (
+        "the low-credit clip says 'half a dollar' -- change credit.warn_below "
+        "and you must reword and re-render it with scripts/make_speech.py"
+    )
+    script = (PROJECT_ROOT / "scripts" / "make_speech.py").read_text()
+    assert "below half a dollar" in script

@@ -36,7 +36,16 @@ from .providers.client import OpenRouterClient, OpenRouterError
 from .router import Router
 from .skills.registry import Registry
 from .speech import Spoken, speak_streaming
-from .status import MIC_BACK, NO_MIC, NO_NETWORK, Announcer, SilenceWatch, classify
+from .status import (
+    LOW_CREDIT,
+    MIC_BACK,
+    NO_MIC,
+    NO_NETWORK,
+    Announcer,
+    CreditWatch,
+    SilenceWatch,
+    classify,
+)
 from .wake import WakeWordDetector
 
 log = logging.getLogger("faethon")
@@ -83,6 +92,11 @@ class Faethon:
         #: silently, leaving the journal ending on an error from long before
         #: everything started working.
         self._capture_failures = 0
+        self.credit = CreditWatch(
+            config.credit.warn_below,
+            config.credit.check_every_minutes * 60,
+            self._balance,
+        )
 
         if not config.tts.voice:
             # Leaving this empty is not the same as taking the provider's
@@ -299,6 +313,19 @@ class Faethon:
         self._capture_failures = 0
         if self.announcer.forget(NO_MIC):
             self.announcer.say(MIC_BACK)
+
+    def _balance(self) -> float | None:
+        """Remaining OpenRouter credit, or None if it can't be read.
+
+        /credits reports what was granted and what has been spent, not what is
+        left; the balance is the difference.
+        """
+        try:
+            data = self.client.get_json("/credits").get("data") or {}
+            return float(data["total_credits"]) - float(data["total_usage"])
+        except (OpenRouterError, KeyError, TypeError, ValueError) as e:
+            log.debug("credit check failed: %s", e)
+            return None
 
     def _greet(self) -> None:
         """Say hello once, before the microphone is ever opened.
