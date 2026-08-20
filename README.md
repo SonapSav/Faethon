@@ -434,6 +434,55 @@ The greeting also plays before the microphone is opened, which costs nothing
 and means a future rewording can't wake Faethon up at every start. A test pins
 the margin either way.
 
+## Timers
+
+```
+"Hey Rhasspy, set a timer for ten minutes"
+"Hey Rhasspy, set a pasta timer for eight minutes"
+"How long left on the pasta timer?"
+"Cancel the pasta timer"
+```
+
+Several at once, each optionally named. When one comes due a rising three-note
+chime plays and Faethon says which timer it was — the first thing it does
+without being asked.
+
+**Relative only — "in ten minutes", never "at seven."** That's the clock, not
+laziness. The Pi has no battery-backed RTC (`RTC time: n/a`), so the wall clock
+is wrong for the first couple of minutes after a cold boot and then *steps*
+when NTP corrects it. Measured here: stepping the clock 60 seconds moved
+`time.time()` by 62.3s and `time.monotonic()` by 2.3s — the real elapsed. So a
+running timer counts on the monotonic clock, which cannot jump.
+
+**They survive a restart**, which needs the other clock, because monotonic
+resets on reboot and means nothing across one. Each timer carries a wall-clock
+deadline on disk and a monotonic deadline in memory, each used for what it's
+good at. Verified: a 3-minute timer set, the service restarted, and it came
+back reading 2:38 — it counted the time it was away.
+
+Restoring waits for `/run/systemd/timesync/synchronized`, so a timer is never
+restored against a clock that hasn't been corrected yet. Three outcomes by how
+stale the deadline is:
+
+| deadline | what happens |
+|---|---|
+| still ahead | resumes normally |
+| just missed (under 5 min) | fires at once, saying it's late |
+| long past — Pi was off overnight | dropped and logged, not announced |
+
+State lives in `/var/lib/faethon`, declared as `StateDirectory=faethon` in the
+unit: systemd creates it, owns it to the service user, and adds it to the
+sandbox's writable paths, so neither `ProtectHome` nor `ProtectSystem` has to
+be relaxed and nothing is written inside the checkout. Writes are atomic —
+a crash mid-write would otherwise leave JSON that fails to parse, turning a
+lost timer into a permanently broken one.
+
+Timers are also the reason skills have a `tick()` hook: called while idle and
+between turns, returning a sentence to speak or nothing. Returning text rather
+than speaking keeps skills free of any audio dependency, exactly as `run()`
+does. Worst case a timer is one turn late, since the wake loop doesn't run
+during a conversation.
+
 ## Restarting it
 
 Say **"Hey Rhasspy, restart yourself"** — also "restart the assistant",

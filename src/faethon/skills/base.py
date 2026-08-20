@@ -81,6 +81,18 @@ class Skill(ABC):
             },
         }
 
+    def tick(self) -> str | None:
+        """Called repeatedly while Faethon is idle, and between turns.
+
+        Return a sentence to have it spoken unprompted, or None for nothing.
+        This is how a skill acts without being asked -- a timer coming due, a
+        threshold crossed -- and returning text rather than speaking directly
+        keeps skills free of any audio dependency, exactly as `run()` does.
+
+        Called often, so it must be cheap: no network, no disk, no blocking.
+        """
+        return None
+
     def after_reply(self) -> None:
         """Run once the reply has finished being spoken.
 

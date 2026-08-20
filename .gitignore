@@ -21,3 +21,4 @@ models/*
 # clone gets a green suite. To restore that coverage on your own machine, put
 # your own recordings here -- 16 kHz mono WAV, one saying the wake word, one
 # saying similar phrases that are not it -- and see tests/test_wake_word.py.
+state/

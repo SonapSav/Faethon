@@ -32,6 +32,10 @@ CHIMES = {
     # prompt, and it plays when nobody has spoken for five seconds.
     "done.wav": [(E6, 0.070), (A5, 0.100)],
 }
+# Three rising notes, so it is not mistakable for either of the two-note
+# chimes: this one arrives when nobody asked for it and has to say "look up"
+# rather than "go ahead" or "we're finished".
+CHIMES["timer.wav"] = [(A5, 0.09), (E6, 0.09), (E6 * 1.5, 0.16)]
 DONE_GAIN = 0.75
 
 

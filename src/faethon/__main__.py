@@ -57,6 +57,7 @@ CLOSE_SOUND = ASSETS_DIR / "done.wav"   # "we're finished; wake me again"
 # of credit, or the wifi is not up -- when knowing the service came back is
 # worth most. Regenerate with scripts/make_greeting.py.
 GREETING_SOUND = ASSETS_DIR / "greeting.wav"
+TIMER_SOUND = ASSETS_DIR / "timer.wav"   # "look up", not "go ahead"
 
 
 class Faethon:
@@ -307,6 +308,11 @@ class Faethon:
                     log.info("no follow-up; conversation closed")
                 return
 
+            # Also between turns: the wake loop does not run during a
+            # conversation, and one can now last five minutes. Worst case a
+            # timer is one turn late rather than a whole conversation late.
+            self._tick_skills()
+
             turns += 1
             reason = self._over_budget(turns, time.monotonic() - started)
             if reason:
@@ -354,6 +360,35 @@ class Faethon:
         except (OpenRouterError, KeyError, TypeError, ValueError) as e:
             log.debug("credit check failed: %s", e)
             return None
+
+    def _tick_skills(self) -> None:
+        """Give every skill a chance to speak without being asked.
+
+        Cheap by contract -- called once per audio frame while idle -- and the
+        skill returns text rather than speaking, so it needs no audio of its
+        own. Anything raised here is logged and swallowed: a broken skill must
+        not take down the loop that is listening for the wake word.
+        """
+        for skill in self.registry:
+            try:
+                said = skill.tick()
+            except Exception:  # noqa: BLE001
+                log.exception("tick failed in %s", skill.name)
+                continue
+            if said:
+                self._announce(said)
+                return
+
+    def _announce(self, text: str) -> None:
+        """Say something nobody asked for: chime first, then the words.
+
+        The chime carries the attention on its own, so if speech fails -- no
+        network, no credit -- the sound still lands and a timer is not silently
+        lost.
+        """
+        log.info("announcing: %s", text)
+        playback.play_wav(TIMER_SOUND, self.config.audio.output_device)
+        self._speak(text)
 
     def _greet(self) -> None:
         """Say hello once, before the microphone is ever opened.
@@ -414,6 +449,7 @@ class Faethon:
                 # at the deadline instead of merely being ignored by the next
                 # turn -- which would leave it sitting in RAM.
                 self.memory.expire_if_idle()
+                self._tick_skills()
                 frame = read_frame()
                 if not opened:
                     opened = True

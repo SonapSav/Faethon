@@ -16,6 +16,7 @@ import pytest
 
 from faethon.__main__ import ACK_SOUND, CLOSE_SOUND, Faethon
 from faethon.config import load_config
+from faethon.skills.registry import Registry
 from faethon.status import Announcer, SilenceWatch
 
 
@@ -61,6 +62,8 @@ def rig(monkeypatch):
                 self.faethon.config.audio.frame_ms
             )
             self.faethon._capture_failures = 0
+            # Empty: these tests are about the loop, not about what ticks in it.
+            self.faethon.registry = Registry([])
             self.events = events
 
         def script(self, replies: list[bool]) -> None:

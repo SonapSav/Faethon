@@ -48,6 +48,10 @@ Group=webmaster
 SupplementaryGroups=audio
 
 WorkingDirectory=/home/webmaster/apps/faethon
+# /var/lib/faethon, created and owned by systemd and added to the sandbox's
+# writable paths automatically -- so timers survive a restart without relaxing
+# ProtectHome or keeping state inside the checkout.
+StateDirectory=faethon
 # `uv run` re-syncs the venv from uv.lock if it drifted, so a `git pull`
 # followed by a restart picks up dependency changes without extra steps.
 ExecStart=/home/webmaster/.local/bin/uv run --project /home/webmaster/apps/faethon faethon
