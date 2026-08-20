@@ -12,8 +12,12 @@ models/*
 !models/*.tflite
 *.wav
 !assets/*.wav
-# Recordings of the owner's actual voice, used to pin the wake-word thresholds
-# in the test suite. Not reproducible without them: a threshold chosen against
-# synthesised speech has already failed here once, scoring 0.84-0.91 on TTS and
-# 0.52-0.55 on a real voice.
-!training-samples/*.wav
+# training-samples/ holds recordings of the owner's voice, used to pin the
+# wake-word thresholds. Deliberately NOT tracked: this repository is public,
+# and a recording of someone's voice is not the kind of thing to publish for
+# the convenience of a test fixture.
+#
+# The wake-word tests skip themselves when the samples are absent, so a fresh
+# clone gets a green suite. To restore that coverage on your own machine, put
+# your own recordings here -- 16 kHz mono WAV, one saying the wake word, one
+# saying similar phrases that are not it -- and see tests/test_wake_word.py.

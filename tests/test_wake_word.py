@@ -24,9 +24,17 @@ The second matters as much as the first. It is the same voice and the same
 microphone saying phrases of the same shape that are *not* the wake word, so it
 catches a model or threshold loose enough to fire on anything vaguely similar.
 
-Offline, but it needs the pretrained model on disk. openWakeWord fetches that
-on first run, so a fresh clone skips these until Faethon has been started once
-rather than quietly downloading during a test run.
+Offline, but it needs two things that are not in the repository.
+
+The pretrained model is fetched by openWakeWord on first run, so a fresh clone
+skips these until Faethon has been started once rather than quietly downloading
+during a test run.
+
+The recordings are absent on purpose: this is a public repository, and a
+recording of someone's voice is not the kind of thing to publish for the
+convenience of a fixture. Supply your own to get this coverage back -- 16 kHz
+mono WAV, one saying the wake word and one saying similar phrases that are not
+it -- and these will pick them up.
 """
 
 from __future__ import annotations
@@ -60,6 +68,11 @@ def _model_on_disk(name: str) -> bool:
 
 @pytest.fixture(scope="module")
 def config():
+    if not (SPOKEN_WAKE_WORD.exists() and SPOKEN_OTHER_WAKE_WORDS.exists()):
+        pytest.skip(
+            f"no voice recordings in {SAMPLES.name}/ -- see this module's "
+            "docstring for what to put there"
+        )
     return load_config()
 
 
