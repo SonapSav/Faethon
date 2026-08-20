@@ -443,9 +443,12 @@ the margin either way.
 "Cancel the pasta timer"
 ```
 
-Several at once, each optionally named. When one comes due a rising three-note
-chime plays and Faethon says which timer it was — the first thing it does
-without being asked.
+Several at once, each optionally named. When one comes due, a C major scale
+falls a full octave — eight notes, the last held — and Faethon says which timer
+it was. The first thing it does without being asked.
+
+`done.wav` also falls, so length is what separates them: two notes over 0.19s
+against eight over 0.94s. The discriminator is the run, not the direction.
 
 **Relative only — "in ten minutes", never "at seven."** That's the clock, not
 laziness. The Pi has no battery-backed RTC (`RTC time: n/a`), so the wall clock

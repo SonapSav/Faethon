@@ -32,10 +32,18 @@ CHIMES = {
     # prompt, and it plays when nobody has spoken for five seconds.
     "done.wav": [(E6, 0.070), (A5, 0.100)],
 }
-# Three rising notes, so it is not mistakable for either of the two-note
-# chimes: this one arrives when nobody asked for it and has to say "look up"
-# rather than "go ahead" or "we're finished".
-CHIMES["timer.wav"] = [(A5, 0.09), (E6, 0.09), (E6 * 1.5, 0.16)]
+# A full C major scale falling an octave, one note at a time, with the last
+# held. It arrives when nobody asked for it, so it has to be recognisable
+# across a room and unmistakable for the other two.
+#
+# done.wav also falls, which would be a problem if length did not separate
+# them: two notes over 0.19s against eight over roughly a second. The
+# discriminator here is the run, not the direction.
+_C_MAJOR_DOWN = [1046.50, 987.77, 880.00, 783.99, 698.46, 659.25, 587.33, 523.25]
+CHIMES["timer.wav"] = [
+    (f, 0.20 if i == len(_C_MAJOR_DOWN) - 1 else 0.085)
+    for i, f in enumerate(_C_MAJOR_DOWN)
+]
 DONE_GAIN = 0.75
 
 
