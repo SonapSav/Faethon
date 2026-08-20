@@ -60,6 +60,7 @@ def rig(monkeypatch):
             self.faethon.silence = SilenceWatch(
                 self.faethon.config.audio.frame_ms
             )
+            self.faethon._capture_failures = 0
             self.events = events
 
         def script(self, replies: list[bool]) -> None:
@@ -301,3 +302,60 @@ def test_the_turn_line_reports_this_turn_not_just_the_running_total():
     src = inspect.getsource(Faethon._handle_turn)
     assert "spent_before" in src, "no per-turn cost is captured"
     assert "this turn" in src, "the log line does not distinguish the two"
+
+
+# -- capture recovery --------------------------------------------------------
+
+
+def test_a_recovered_microphone_says_so(rig, monkeypatch):
+    """The failure was announced, so the recovery should be too."""
+    from faethon import __main__ as main_mod
+    from faethon.status import MIC_BACK, NO_MIC
+
+    played: list[str] = []
+    monkeypatch.setattr(
+        main_mod.playback, "play_wav", lambda path, device: played.append(path.stem)
+    )
+    rig.faethon.announcer.say(NO_MIC)          # the mic went away, audibly
+    rig.faethon._capture_failures = 55
+    rig.faethon._capture_ready()
+
+    assert played == [NO_MIC, MIC_BACK]
+    assert rig.faethon._capture_failures == 0
+
+
+def test_a_clean_start_says_nothing_about_the_microphone(rig, monkeypatch):
+    """Nothing failed, so there is nothing to recover from."""
+    from faethon import __main__ as main_mod
+
+    played: list[str] = []
+    monkeypatch.setattr(
+        main_mod.playback, "play_wav", lambda path, device: played.append(path.stem)
+    )
+    rig.faethon._capture_ready()
+    assert played == []
+
+
+def test_recovery_is_silent_if_the_failure_never_was_announced(rig, monkeypatch):
+    """It failed and recovered before the clip could be played -- saying "I can
+    hear you again" to someone who noticed nothing is just noise."""
+    from faethon import __main__ as main_mod
+
+    played: list[str] = []
+    monkeypatch.setattr(
+        main_mod.playback, "play_wav", lambda path, device: played.append(path.stem)
+    )
+    rig.faethon._capture_failures = 2          # failed, but nothing announced
+    rig.faethon._capture_ready()
+    assert played == []
+
+
+def test_a_new_stream_restarts_the_silence_clock(rig):
+    """The old count was frames from a device that has since gone and come
+    back; carrying it over would report a dead microphone that is now fine."""
+    dead = b"\x00\x00" * 1280
+    for _ in range(20):
+        rig.faethon.silence.feed(dead)
+    before = rig.faethon.silence._silent_ms
+    rig.faethon._capture_ready()
+    assert before > 0 and rig.faethon.silence._silent_ms == 0

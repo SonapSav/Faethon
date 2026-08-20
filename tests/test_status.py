@@ -208,3 +208,28 @@ def test_nothing_is_billed_for_empty_text(monkeypatch):
         c, "   ", model="m", voice="", cost_per_1k_chars=0.0032
     )) == []
     assert c.spent == 0.0
+
+
+# -- recovery ----------------------------------------------------------------
+# A USB microphone can take minutes to appear after a cold boot -- measured at
+# 2m45s on this Pi. The retry loop handled that correctly and silently, so the
+# journal ended on an error from long before everything started working, and
+# the last thing heard in the room was "I can't hear the microphone".
+
+
+def test_forget_reports_whether_anyone_heard_the_failure(announcer):
+    """Announcing that the microphone is back, to someone who never heard it
+    go, is noise -- and at startup nothing was usually wrong in the first
+    place."""
+    assert announcer.forget(NO_MIC) is False, "nothing was announced yet"
+    announcer.say(NO_MIC)
+    assert announcer.forget(NO_MIC) is True
+    assert announcer.forget(NO_MIC) is False, "should only report it once"
+
+
+def test_forgetting_one_status_leaves_the_others_alone(announcer):
+    announcer.say(NO_MIC)
+    announcer.say(NO_NETWORK)
+    announcer.forget(NO_MIC)
+    assert announcer.say(NO_MIC) is True, "should be sayable again"
+    assert announcer.say(NO_NETWORK) is False, "unrelated status was cleared"

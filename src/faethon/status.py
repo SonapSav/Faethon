@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 NO_NETWORK = "no-network"
 NO_CREDIT = "no-credit"
 NO_MIC = "no-mic"
+MIC_BACK = "mic-back"
 
 #: 402 is the whole reason these are separate clips: "check the router" and
 #: "top up the account" are different instructions, and guessing wrong sends
@@ -77,6 +78,19 @@ class Announcer:
     def recovered(self) -> None:
         """Something worked. Let the next failure be heard again."""
         self._said.clear()
+
+    def forget(self, status: str) -> bool:
+        """Drop one status, and report whether it had actually been announced.
+
+        The caller uses the answer to decide whether recovery is worth saying
+        out loud. Telling someone the microphone is back, when they never
+        heard it go, is just noise -- and at startup the common case is that
+        nothing was ever wrong.
+        """
+        if status in self._said:
+            self._said.discard(status)
+            return True
+        return False
 
 
 class SilenceWatch:

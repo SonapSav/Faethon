@@ -35,6 +35,9 @@ PHRASES = {
     "no-network": "I can't reach the network right now.",
     "no-credit": "My OpenRouter credit has run out.",
     "no-mic": "I can't hear the microphone.",
+    # Only played to someone who heard the failure. Announcing that the
+    # microphone is back, to a person who never knew it had gone, is noise.
+    "mic-back": "I can hear you again.",
     # Played by systemd, not by Faethon, when the service itself cannot run.
     "failed": "Something has gone wrong and I have stopped. Check the logs.",
 }

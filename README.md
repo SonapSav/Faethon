@@ -343,6 +343,7 @@ with no network, key, credit or model involved:
 | "I can't reach the network right now." | request failed or retries exhausted | check the router |
 | "My OpenRouter credit has run out." | HTTP 402 | top up |
 | "I can't hear the microphone." | `CaptureError`, or minutes of digital silence | check the mic |
+| "I can hear you again." | capture recovered, and the failure had been announced | nothing |
 | "Something has gone wrong and I have stopped." | the service gave up | `journalctl -u faethon` |
 
 Credit and network are separate clips because the fixes are different, and
@@ -358,6 +359,20 @@ still peaks at 2–4 per frame.
 Each status is announced once and then suppressed until something works again —
 an outage lasts as long as it lasts, and repeating it every attempt turns
 information into nagging.
+
+**Recovery is announced too**, which matters more than it sounds. A USB
+microphone can take minutes to appear after a cold boot — measured at 2m45s
+here — and the retry loop handled that correctly and *silently*. So the
+journal ended on an error from long before everything started working, and the
+last thing heard in the room was "I can't hear the microphone". Indistinguishable
+from having died, while it was in fact fine.
+
+Readiness is the first frame actually read, not the capture subprocess
+starting: `Popen` succeeds immediately even when `arecord` is about to exit
+with "Device or resource busy", and announcing there made a contended device
+alternate between the two clips every few seconds. Recovery is only spoken if
+the failure was — telling someone the microphone is back, when they never
+heard it go, is noise.
 
 The last row is systemd's, not Faethon's, via `OnFailure=faethon-failed.service`
 — a `oneshot` that runs nothing but `aplay`, so it still works when a missing

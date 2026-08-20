@@ -36,7 +36,7 @@ from .providers.client import OpenRouterClient, OpenRouterError
 from .router import Router
 from .skills.registry import Registry
 from .speech import Spoken, speak_streaming
-from .status import NO_MIC, NO_NETWORK, Announcer, SilenceWatch, classify
+from .status import MIC_BACK, NO_MIC, NO_NETWORK, Announcer, SilenceWatch, classify
 from .wake import WakeWordDetector
 
 log = logging.getLogger("faethon")
@@ -77,6 +77,12 @@ class Faethon:
         self._running = True
         self.announcer = Announcer(config.audio.output_device)
         self.silence = SilenceWatch(config.audio.frame_ms)
+        #: Consecutive failures to open the capture stream, so recovery can be
+        #: reported. A USB microphone can take minutes to appear after a cold
+        #: boot -- measured at 2m45s here -- and the retry loop handled that
+        #: silently, leaving the journal ending on an error from long before
+        #: everything started working.
+        self._capture_failures = 0
 
         if not config.tts.voice:
             # Leaving this empty is not the same as taking the provider's
@@ -275,6 +281,25 @@ class Faethon:
 
     # -- main loop -------------------------------------------------------
 
+    def _capture_ready(self) -> None:
+        """The capture stream opened. Say so if anyone heard it fail.
+
+        Recovery used to be entirely silent: the loop caught the error, slept,
+        retried, and on success simply carried on. So the last thing in the
+        journal was an error from minutes earlier, and the last thing heard in
+        the room was "I can't hear the microphone" -- indistinguishable from
+        having died, while it was in fact working.
+        """
+        # A fresh stream is a fresh silence clock; the old one was counting
+        # frames from a device that has since gone away and come back.
+        self.silence.reset()
+        if not self._capture_failures:
+            return
+        log.info("microphone back after %d attempt(s)", self._capture_failures)
+        self._capture_failures = 0
+        if self.announcer.forget(NO_MIC):
+            self.announcer.say(MIC_BACK)
+
     def _greet(self) -> None:
         """Say hello once, before the microphone is ever opened.
 
@@ -306,6 +331,7 @@ class Faethon:
             except capture.CaptureError as e:
                 # The USB mic was unplugged, or the wireless link dropped.
                 # Keep trying: it usually comes back.
+                self._capture_failures += 1
                 log.error("audio capture lost: %s -- retrying in 3s", e)
                 self.announcer.say(NO_MIC)
                 time.sleep(3)
@@ -321,6 +347,12 @@ class Faethon:
             self.config.audio.sample_rate,
             self.config.audio.frame_bytes,
         ) as read_frame:
+            # Readiness is the first frame actually read, not the subprocess
+            # starting. Popen succeeds immediately even when arecord is about
+            # to exit with "Device or resource busy" -- announcing there made
+            # a contended device flip between "I can hear you again" and "I
+            # can't hear the microphone" every few seconds.
+            opened = False
             while self._running:
                 # Checked here rather than on a timer thread: this loop already
                 # ticks once per 80ms frame while idle, so the buffer is wiped
@@ -328,6 +360,9 @@ class Faethon:
                 # turn -- which would leave it sitting in RAM.
                 self.memory.expire_if_idle()
                 frame = read_frame()
+                if not opened:
+                    opened = True
+                    self._capture_ready()
                 if self.silence.feed(frame):
                     # Raises nothing and logs nothing on its own: a wireless
                     # mic with a flat transmitter hands over digital silence
