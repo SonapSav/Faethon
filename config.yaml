@@ -100,6 +100,25 @@ conversation:
   # sharply once Faethon is louder than you are at the microphone.
   barge_in_threshold: 0.1
 
+  # A conversation cannot run past these without a fresh wake word.
+  #
+  # Not a latency tuning. The follow-up window is the only period when the
+  # microphone is live without anyone having deliberately triggered it, and
+  # anything that keeps producing transcribable speech -- a television in the
+  # same room -- re-opens it on every turn. Unbounded, the exception becomes
+  # the steady state: an open mic streaming the room to Whisper indefinitely,
+  # with nobody having said the wake word since whenever.
+  #
+  # Deliberately loose, because this is a bound on runaway rather than a trim
+  # on normal use. The longest real conversation recorded here was five
+  # follow-ups, so twenty turns and five minutes cannot touch one.
+  #
+  # Both exist because they fail differently: turns bound the cost, since each
+  # is a paid call, and seconds bound how long the microphone stays live. 0
+  # disables either.
+  max_turns: 20
+  max_seconds: 300
+
   # Say hello once when the service starts, so a restart is audible from the
   # other side of the room. The sentence is pre-rendered to assets/greeting.wav
   # rather than synthesised each boot, so it still plays when OpenRouter is

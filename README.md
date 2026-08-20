@@ -141,6 +141,14 @@ is over and the wake word is needed again. Nothing else distinguishes them, so
 they're the same two notes in opposite order — audible across a room without
 having to be learned.
 
+`max_turns` and `max_seconds` bound how far a conversation can run without a
+fresh wake word. That matters more than the cost: anything that keeps producing
+transcribable speech — a television in the same room — re-opens the follow-up
+window on every turn, so unbounded, the one period when the microphone is live
+without a deliberate trigger becomes the steady state. Turns bound the spend,
+seconds bound how long the mic stays open; either ends it, and the falling
+chime says so.
+
 `follow_up_ms` is worth thinking about as a privacy setting, not just a latency
 one: it's the only period when the microphone is live without anyone having
 deliberately triggered it, and it is spent in full, as silence, at the end of

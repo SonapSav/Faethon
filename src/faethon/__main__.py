@@ -258,6 +258,21 @@ class Faethon:
             raise listener.error
         return spoken
 
+    def _over_budget(self, turns: int, elapsed: float) -> str | None:
+        """Why this conversation should stop, or None to carry on.
+
+        Both bounds exist because they fail differently. Turns bound the cost,
+        since every one is a paid call. Seconds bound how long the microphone
+        stays live without a deliberate trigger, which is the privacy claim the
+        README makes for the follow-up window.
+        """
+        cfg = self.config.conversation
+        if cfg.max_turns and turns >= cfg.max_turns:
+            return f"{turns} turns without a wake word"
+        if cfg.max_seconds and elapsed >= cfg.max_seconds:
+            return f"{elapsed / 60:.1f} minutes without a wake word"
+        return None
+
     def _converse(self, stream) -> None:
         """Run turns back to back until the user stops answering.
 
@@ -266,6 +281,8 @@ class Faethon:
         """
         # None means "use the configured wake-word budget" for the first turn.
         window_ms: int | None = None
+        started = time.monotonic()
+        turns = 0
 
         while self._running:
             playback.play_wav_async(ACK_SOUND, self.config.audio.output_device)
@@ -288,6 +305,17 @@ class Faethon:
                 if window_ms is not None and not replied:
                     playback.play_wav(CLOSE_SOUND, self.config.audio.output_device)
                     log.info("no follow-up; conversation closed")
+                return
+
+            turns += 1
+            reason = self._over_budget(turns, time.monotonic() - started)
+            if reason:
+                # The chime rather than a sentence: a falling tone already
+                # means "we're finished, wake me again", and explaining the
+                # budget out loud would be noise at the one moment nobody
+                # asked for a reply.
+                log.info("conversation ended: %s", reason)
+                playback.play_wav(CLOSE_SOUND, self.config.audio.output_device)
                 return
 
             window_ms = self.config.conversation.follow_up_ms

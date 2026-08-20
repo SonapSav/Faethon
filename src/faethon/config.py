@@ -68,6 +68,18 @@ class ConversationConfig(BaseModel):
     #: inference per 80ms frame while Faethon is speaking (~16% of one core),
     #: and nothing at all when it is quiet.
     barge_in: bool = True
+    #: A conversation cannot run past these without a fresh wake word. Not a
+    #: latency tuning: the follow-up window is the only period when the
+    #: microphone is live without anyone having deliberately triggered it, and
+    #: anything that keeps producing transcribable speech -- a television in
+    #: the same room -- re-opens it on every turn. Left unbounded, the
+    #: exception becomes the steady state.
+    #:
+    #: Deliberately loose. This is a bound on runaway, not a trim on normal
+    #: use: the longest real conversation recorded here was five follow-ups,
+    #: so twenty turns and five minutes cannot touch one. 0 disables either.
+    max_turns: int = Field(20, ge=0)
+    max_seconds: float = Field(300.0, ge=0.0)
     #: Wake score needed to interrupt, which has to be far lower than the
     #: quiet-room threshold: Faethon's own voice is masking yours. Measured
     #: through the speaker and mic at equal loudness, the wake word scored

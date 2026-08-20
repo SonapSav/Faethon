@@ -359,3 +359,66 @@ def test_a_new_stream_restarts_the_silence_clock(rig):
     before = rig.faethon.silence._silent_ms
     rig.faethon._capture_ready()
     assert before > 0 and rig.faethon.silence._silent_ms == 0
+
+
+# -- the conversation cap ----------------------------------------------------
+# The follow-up window is the only period when the microphone is live without
+# anyone having deliberately triggered it. Anything that keeps producing
+# transcribable speech -- a television in the same room -- re-opens it on every
+# turn, so without a bound the exception becomes the steady state. Deliberately
+# loose: the longest real conversation recorded here was five follow-ups.
+
+
+def test_a_runaway_conversation_is_stopped(rig):
+    """Scripted to answer forever; the cap is what ends it."""
+    rig.faethon.config.conversation.max_turns = 6
+    rig.script([True] * 40)
+    assert len(rig.windows) == 6, f"ran {len(rig.windows)} turns"
+    assert rig.chimes[-1] == "done.wav", "should close with the falling chime"
+
+
+def test_a_normal_conversation_is_untouched(rig):
+    """Five follow-ups is the longest real one recorded. The cap must be a
+    bound on runaway, not a trim on ordinary use."""
+    rig.script([True] * 5 + [False])
+    assert len(rig.windows) == 6
+    assert rig.faethon._over_budget(turns=5, elapsed=90.0) is None
+
+
+def test_the_clock_bounds_it_too(rig):
+    """Turns bound the cost; seconds bound how long the microphone is live.
+    A slow conversation could stay well under the turn cap for a long time."""
+    rig.faethon.config.conversation.max_turns = 0        # turns disabled
+    rig.faethon.config.conversation.max_seconds = 60.0
+    assert rig.faethon._over_budget(turns=3, elapsed=59.0) is None
+    assert rig.faethon._over_budget(turns=3, elapsed=61.0) is not None
+
+
+def test_either_bound_alone_can_end_it(rig):
+    c = rig.faethon.config.conversation
+    c.max_turns, c.max_seconds = 20, 300.0
+    assert "turns" in (rig.faethon._over_budget(20, 10.0) or "")
+    assert "minutes" in (rig.faethon._over_budget(2, 301.0) or "")
+
+
+def test_zero_disables_each_bound(rig):
+    c = rig.faethon.config.conversation
+    c.max_turns, c.max_seconds = 0, 0.0
+    assert rig.faethon._over_budget(turns=9999, elapsed=99999.0) is None
+
+
+def test_the_cap_ends_with_a_chime_not_a_sentence(rig):
+    """A falling tone already means "we're finished, wake me again".
+    Explaining the budget aloud would be noise at the one moment nobody asked
+    for a reply."""
+    rig.faethon.config.conversation.max_turns = 3
+    rig.script([True] * 10)
+    assert rig.chimes == ["ack.wav", "ack.wav", "ack.wav", "done.wav"]
+
+
+def test_a_capped_conversation_leaves_the_follow_up_window_shut(rig):
+    """It has to return to wake-word detection, not open another window --
+    that would be the runaway continuing."""
+    rig.faethon.config.conversation.max_turns = 2
+    rig.script([True] * 10)
+    assert rig.windows == [None, 5000]
