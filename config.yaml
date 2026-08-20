@@ -208,8 +208,23 @@ llm:
   # the United Kingdom doesn't have a king". Confidently wrong on the second
   # try is worse than useless in a voice assistant, where there's no transcript
   # to scroll back through.
+  # The name matters more than it looks. This opened "You are Rhasspy" -- four
+  # words, one a loaded proper noun with a real referent and no grounding
+  # facts. Asked what it was, the model retrieved what it knows about the
+  # Rhasspy project and described that instead, fluently and wrongly:
+  #
+  #   "I am named after the Rhasspy project ... built by the same team."
+  #
+  # Do not fix that by naming the wake phrase and explaining it away. Measured:
+  # a variant adding "people wake you with 'hey rhasspy', which is only a
+  # trigger" made it worse -- "I am built on the Rhasspy project's wake-word
+  # detection and voice assistant framework". Naming the entity is what
+  # activates it. State positively, never deny.
   system_prompt: >-
-    You are Rhasspy, a voice assistant. Your replies are spoken aloud, so keep them
+    You are Faethon, a voice assistant running on a Raspberry Pi in a private
+    home. Only your wake-word listening happens on that Pi; you use a cloud
+    language model to think, and cloud services to hear and speak.
+    Your replies are spoken aloud, so keep them
     brief and conversational -- one or two sentences unless asked for detail.
     Never use markdown, bullet points, or emoji. Write numbers and units the way
     a person would say them.

@@ -441,6 +441,44 @@ polkit rule for `org.freedesktop.login1.reboot` or a sudoers entry plus
 dropping `NoNewPrivileges` from the unit — a real privilege for a command one
 mis-transcription away from taking the machine down. Use SSH.
 
+## Asking it what it is
+
+Say **"what are you"**, "who made you", "are you ChatGPT", or "why do I say hey
+rhasspy" and you get a fixed, correct answer with no model involved.
+
+This exists because identity is the one category where the model's priors are
+guaranteed wrong — Faethon postdates the training data, so the only source of
+truth is the prompt. The prompt used to open `You are Rhasspy, a voice
+assistant`: four words, one of them a loaded proper noun with a real referent
+and no grounding facts. Asked about itself, the model retrieved what it knows
+about the Rhasspy project and described *that*, inventing a lineage on the way:
+
+> **Q:** are you related to the Rhasspy project
+> **A:** Yes, I am named after the Rhasspy project ... built by the same team.
+
+There's no transcript to check that against, and the answer lands in the memory
+buffer and is resent as context — so the model stays consistent with its own
+confabulation for the rest of the conversation.
+
+Three things fix it, and two of them are counterintuitive:
+
+**Don't name the other project, even to deny it.** A prompt variant explaining
+that "hey rhasspy" is only a trigger phrase measured *worse* — it produced "I
+am built on the Rhasspy project's wake-word detection and voice assistant
+framework". Naming the entity is what activates it. The prompt now grounds the
+identity positively and never mentions it; a test asserts the token stays out.
+
+**Faethon must never speak its own wake phrase.** "You wake me by saying hey
+rhasspy" scores **0.9984** on the wake model through the speaker and mic —
+above the 0.7 that wakes it and far above the 0.1 barge-in listens at. It would
+interrupt itself mid-sentence every time anyone asked. So the answer explains
+the wake word without quoting it, and a test enforces that across every reply.
+
+**"What can you do" is deliberately left to the model.** That answer is
+dynamic — read off the live tool schemas, so it stays correct as skills are
+added. A hardcoded capability list would rot on the next one. Identity is
+fixed; capabilities are not.
+
 ## Writing a skill
 
 Drop a file in `src/faethon/skills/`. The registry finds it — no imports to
