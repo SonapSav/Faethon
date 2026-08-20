@@ -134,6 +134,17 @@ conversation:
   # of the greeting, or it can wake itself.
   greet_on_start: true
 
+weather:
+  # Where "the weather" means when nobody names a place. Right-click any map to
+  # get coordinates; four decimals is far more precision than a forecast has.
+  #
+  # Open-Meteo, which needs no key and no account -- so this skill cannot be
+  # half-configured, and works on a fresh clone.
+  latitude: 25.2048
+  longitude: 55.2708
+  place_name: "Dubai"     # what Faethon calls it out loud
+  units: "metric"         # or "imperial" for Fahrenheit
+
 turn_log:
   # One line per turn in /var/lib/faethon/turns.jsonl, so the next threshold
   # can be measured rather than guessed.

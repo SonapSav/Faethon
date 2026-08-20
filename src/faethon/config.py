@@ -89,6 +89,21 @@ class ConversationConfig(BaseModel):
     greet_on_start: bool = True
 
 
+class WeatherConfig(BaseModel):
+    """Where "the weather" means, when nobody says a place.
+
+    Machine-specific, so it lives here. Find your coordinates by right-clicking
+    on any map; four decimal places is far more precision than a forecast has.
+    """
+
+    latitude: float = Field(25.2048, ge=-90.0, le=90.0)
+    longitude: float = Field(55.2708, ge=-180.0, le=180.0)
+    #: What Faethon calls it out loud.
+    place_name: str = "Dubai"
+    #: "metric" for Celsius, "imperial" for Fahrenheit.
+    units: Literal["metric", "imperial"] = "metric"
+
+
 class TurnLogConfig(BaseModel):
     """A line per turn, so future thresholds can be measured.
 
@@ -192,6 +207,7 @@ class Config(BaseModel):
     conversation: ConversationConfig = ConversationConfig()
     credit: CreditConfig = CreditConfig()
     turn_log: TurnLogConfig = TurnLogConfig()
+    weather: WeatherConfig = WeatherConfig()
     models: ModelsConfig
     stt: STTConfig = STTConfig()
     llm: LLMConfig

@@ -434,6 +434,43 @@ The greeting also plays before the microphone is opened, which costs nothing
 and means a future rewording can't wake Faethon up at every start. A test pins
 the margin either way.
 
+## Weather
+
+```
+"Hey Rhasspy, what's the weather"       It's 35 and clear in Dubai, feels like 44, with a high of 38.
+"Will it rain tomorrow?"                Yes, an 80 percent chance of rain in Dubai tomorrow.
+"Do I need an umbrella?"                No rain expected in Dubai today.
+"What's the weather in Paris?"          It's 24 and overcast in Paris, with a high of 25.
+```
+
+Open-Meteo — no key, no account. A keyless skill can't be half-configured, and
+works on a fresh clone.
+
+**The regex path never captures a place name**, and that's the whole design.
+It's `credit_skill`'s lesson at a larger order of magnitude: "OpenRouter" is one
+coined word with a handful of spellings and it still needed a loose pattern. A
+place name is an open set of proper nouns, many foreign, and Whisper hands back
+"Redding" for Reading — both of which the geocoder resolves happily, one in
+England and one in California. That failure isn't an error, it's the forecast
+for the wrong continent said with total confidence.
+
+So the daily phrasings go through the regex path with no location captured at
+all, and named places go through the model, which has far better priors for
+turning a mangled transcript into a real place. An unknown place is refused
+rather than approximated.
+
+**It answers the question that was asked.** "Will it rain?" replied to with a
+temperature range is worse than no reply — it sounds like an answer and isn't.
+So a rain question gets a rain answer, an umbrella is a rain question, and a
+jacket gets the numbers rather than a verdict, since what warrants a coat is a
+matter of opinion and of who is asking.
+
+Two or three facts, never more: TTS bills per character, and the follow-up
+window means "and tomorrow?" is one sentence away. How it *feels* is mentioned
+only when that differs by four degrees or more — in Dubai in August the gap is
+routinely ten. Forecasts are cached for ten minutes, because a conversation
+about the weather otherwise fetches the same hourly data three times.
+
 ## The turn log
 
 One line per turn in `/var/lib/faethon/turns.jsonl`, so the next threshold can
