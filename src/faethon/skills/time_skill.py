@@ -41,7 +41,11 @@ class TimeSkill(Skill):
         rf"\bwhat (?P<kind>time|day) is it{_END}",
         rf"\bwhat(?:'s|s| is) (?:today'?s? )?(?P<kind>date|day){_END}",
         rf"\btell me the (?P<kind>time|date){_END}",
-        rf"\bcurrent (?P<kind>time|date){_END}",
+        rf"\bcurrent (?P<kind>time|date|year){_END}",
+        # The year was reaching the model, which answers it correctly from the
+        # prompt grounding but costs a call for a fact already on the machine.
+        rf"\bwhat(?:'s|s| is) (?:the |this )?(?:current )?(?P<kind>year){_END}",
+        rf"\bwhat (?P<kind>year) is it{_END}",
     ]
 
     parameters = {
@@ -49,7 +53,7 @@ class TimeSkill(Skill):
         "properties": {
             "kind": {
                 "type": "string",
-                "enum": ["time", "date", "both"],
+                "enum": ["time", "date", "year", "both"],
                 "description": "Which to report. Defaults to time.",
             }
         },
@@ -65,6 +69,8 @@ class TimeSkill(Skill):
         time_str = now.strftime("%I:%M %p").lstrip("0")
         date_str = now.strftime("%A, %B ") + str(now.day)
 
+        if kind == "year":
+            return f"It's {now.year}."
         if kind == "date":
             return f"It's {date_str}."
         if kind in ("day",):

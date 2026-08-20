@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import pytest
 
+from datetime import datetime
+
 from faethon.skills.time_skill import SKILL
 
 
@@ -32,6 +34,24 @@ def test_questions_actually_about_the_clock(heard):
 
 
 @pytest.mark.parametrize("heard", [
+    "what year is it",
+    "what is the year",
+    "whats the current year",
+    "what is this year",
+    "current year",
+])
+def test_questions_about_the_year(heard):
+    """These used to reach the model. It answers them correctly from the
+    prompt grounding, but that is a paid call for a fact already on the
+    machine -- and before the grounding existed it called get_time as a tool
+    and replied with the day and month instead."""
+    assert SKILL.match(heard) is not None, f"no pattern matched {heard!r}"
+    assert SKILL.run(**SKILL.match(heard)) == f"It's {datetime.now().year}."
+
+
+@pytest.mark.parametrize("heard", [
+    "what year is it in Japan",
+    "what a year it has been",
     "what is the time complexity of quicksort",
     "whats the time zone here",
     "what is the date of the meeting",
@@ -49,6 +69,7 @@ def test_the_kind_is_extracted(heard=None):
     assert SKILL.match("what time is it") == {"kind": "time"}
     assert SKILL.match("what is the date") == {"kind": "date"}
     assert SKILL.match("what day is it") == {"kind": "day"}
+    assert SKILL.match("what year is it") == {"kind": "year"}
 
 
 def test_it_still_answers():
