@@ -230,6 +230,26 @@ class Faethon:
         )
         if not spoken:
             log.info("nothing to say")
+
+        # Metadata only -- no transcript, only how long it was. journald
+        # already keeps the words, and whether it should is a live decision.
+        self.turn_log.append(
+            route=self.router.route or "none",
+            wake=start_timeout_ms is None,
+            audio_s=round(audio_sec, 2),
+            stt_s=round(t_stt, 2),
+            reply_s=round(total - t_stt, 2),
+            total_s=round(total, 2),
+            cost=round(self.client.spent - spent_before, 6),
+            chars=len(text),
+            said_chars=len(spoken),
+            held=len(self.memory),
+            interrupted=bool(spoken.interrupted),
+        )
+
+        if self.credit.check():
+            self.announcer.say(LOW_CREDIT)
+
         # An interruption is a reason to keep listening even if nothing was
         # spoken before the cut: saying the wake word means "I want to talk".
         return bool(spoken) or spoken.interrupted

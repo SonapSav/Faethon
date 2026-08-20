@@ -473,3 +473,89 @@ def test_a_quiet_tick_does_not_drain(rig):
     rig.faethon.registry = Registry([])
     rig.faethon._tick_skills(Stream())
     assert drained == []
+
+
+# -- wiring --------------------------------------------------------------
+# Two features shipped dead because of this gap. The turn log and the credit
+# warning were both fully built and fully unit-tested, and neither was ever
+# called: an edit that inserts a call site can fail silently, and a unit test
+# of the component passes regardless. These assert the main loop actually
+# reaches them.
+
+
+@pytest.fixture
+def turn(rig, monkeypatch):
+    """A Faethon with the collaborators recorded rather than real."""
+    from faethon import __main__ as main_mod
+    from faethon.speech import Spoken
+
+    f = rig.faethon
+    seen: dict = {"logged": [], "credit_checked": 0}
+
+    class FakeLog:
+        def append(self, **fields):
+            seen["logged"].append(fields)
+
+    class FakeCredit:
+        def check(self):
+            seen["credit_checked"] += 1
+            return False
+
+    class FakeRouter:
+        route = "llm"
+
+        def handle_streaming(self, text):
+            return iter(["fine."])
+
+        def take_pending_action(self):
+            return None
+
+    from faethon.memory import Memory
+
+    f.memory = Memory(10)
+    f.turn_log = FakeLog()
+    f.credit = FakeCredit()
+    f.router = FakeRouter()
+    f.client = type("C", (), {"spent": 0.25})()
+    monkeypatch.setattr(Faethon, "_capture_utterance", lambda s, r, t=None: b"\x00" * 32000)
+    monkeypatch.setattr(main_mod.stt_mod, "transcribe", lambda *a, **kw: "hello")
+    monkeypatch.setattr(Faethon, "_speak_reply", lambda s, r, t: Spoken("fine."))
+    f.seen = seen
+    return f
+
+
+def test_every_turn_reaches_the_turn_log(turn):
+    """It was built, unit-tested, documented and never called. The log stayed
+    empty through 48 real turns and nothing said so, because a log that fails
+    quietly is exactly what it was designed to be."""
+    turn._handle_turn(lambda: b"")
+    assert len(turn.seen["logged"]) == 1
+    record = turn.seen["logged"][0]
+    assert record["route"] == "llm"
+    assert record["chars"] == len("hello")
+    assert "total_s" in record and "cost" in record
+
+
+def test_every_turn_reaches_the_credit_check(turn):
+    """Same failure, same commit chain -- the turn-log edit anchored on the
+    credit block, so when that was missing this missed too."""
+    turn._handle_turn(lambda: b"")
+    assert turn.seen["credit_checked"] == 1
+
+
+def test_the_turn_log_records_the_route_the_router_took(turn):
+    turn.router.route = "regex:get_time"
+    turn._handle_turn(lambda: b"")
+    assert turn.seen["logged"][0]["route"] == "regex:get_time"
+
+
+def test_a_wake_word_turn_is_distinguished_from_a_follow_up(turn):
+    turn._handle_turn(lambda: b"")                       # no timeout = wake word
+    turn._handle_turn(lambda: b"", start_timeout_ms=5000)  # follow-up
+    assert [r["wake"] for r in turn.seen["logged"]] == [True, False]
+
+
+def test_the_turn_log_carries_no_transcript(turn):
+    """Only how long it was. journald already keeps the words."""
+    turn._handle_turn(lambda: b"")
+    assert "hello" not in str(turn.seen["logged"][0])
