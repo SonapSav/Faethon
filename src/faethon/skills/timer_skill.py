@@ -28,18 +28,13 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
-from .. import state
+from .. import clock, state
 from .base import Skill
 
 log = logging.getLogger(__name__)
 
 STATE_NAME = "timers"
-#: systemd publishes this once NTP has corrected the clock. Absent means the
-#: wall clock cannot be trusted yet, which after a cold boot lasts a couple of
-#: minutes.
-SYNC_FLAG = Path("/run/systemd/timesync/synchronized")
 #: A restored timer this far past its deadline is dropped rather than fired.
 STALE_AFTER_SEC = 300.0
 MAX_TIMERS = 10
@@ -145,9 +140,12 @@ class TimerSkill(Skill):
     name = "set_timer"
     tag = "utility"
     description = (
-        "Set, check or cancel a countdown timer. Timers can be named, several "
-        "can run at once, and Faethon announces them when they come due. "
-        "Durations are relative -- 'in ten minutes', not 'at seven o'clock'."
+        "Set, check or cancel a countdown timer that Faethon is running. "
+        "Timers can be named, several can run at once, and Faethon announces "
+        "them when they come due. Durations are relative -- 'in ten minutes', "
+        "not 'at seven o'clock'. "
+        "ONLY for Faethon's own timers. Not for how long until a date or an "
+        "event -- answer those yourself from the current date."
     )
 
     patterns = [
@@ -185,7 +183,7 @@ class TimerSkill(Skill):
 
     @staticmethod
     def _clock_trusted() -> bool:
-        return SYNC_FLAG.exists()
+        return clock.is_synced()
 
     def _ensure_loaded(self) -> None:
         """Restore from disk once, and only once the clock can be believed."""

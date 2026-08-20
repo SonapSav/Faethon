@@ -54,3 +54,29 @@ def test_the_kind_is_extracted(heard=None):
 def test_it_still_answers():
     assert SKILL.run(kind="time").startswith("It's")
     assert SKILL.run(kind="date").startswith("It's")
+
+
+def test_the_clock_is_not_offered_to_the_model():
+    """Unusual for a harmless read-only skill, and the reason is structural: a
+    tool result ends the turn, since it is yielded straight to speech and never
+    fed back for a second pass. Asked "how long until Christmas?", the model
+    called this as a *step* and the user got "It's Thursday, August 20" as the
+    whole answer.
+
+    The system prompt now carries the date on every request, so the model has
+    no need of the tool. The regex path still answers instantly and free.
+    """
+    from faethon.skills.registry import Registry
+
+    offered = [t["function"]["name"] for t in Registry.discover().tool_schemas()]
+    assert "get_time" not in offered
+    assert SKILL.match("what time is it") is not None, "regex path must still work"
+
+
+def test_the_timer_description_disclaims_date_questions():
+    """Same trap one skill over: the model reached for set_timer(check) on
+    "how long until Christmas" because "how long" looks like a timer query,
+    and the tool's answer ended the turn."""
+    from faethon.skills.timer_skill import SKILL as TIMER
+
+    assert "not for how long until a date" in TIMER.description.lower()

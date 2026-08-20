@@ -55,10 +55,12 @@ def test_the_exit_is_deferred_until_after_the_reply():
 
 def test_it_is_hidden_from_the_llm():
     """A helpful model with a restart tool is a restart waiting to happen."""
-    registry = Registry([RESTART, TIME])
+    from faethon.skills.identity_skill import SKILL as IDENTITY
+
+    registry = Registry([RESTART, IDENTITY])
     offered = [t["function"]["name"] for t in registry.tool_schemas()]
     assert "restart_assistant" not in offered
-    assert "get_time" in offered, "ordinary skills should still be offered"
+    assert "describe_self" in offered, "ordinary skills should still be offered"
 
 
 # -- the router's half of the deferral ---------------------------------------

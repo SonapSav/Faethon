@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator
 
+from . import clock
 from .config import Config
 from .memory import Memory
 from .providers import llm as llm_mod
@@ -99,7 +100,7 @@ class Router:
 
         from .speech import sentence_chunks  # local: avoids a circular import
 
-        messages = self.memory.messages(self.config.llm.system_prompt, text)
+        messages = self.memory.messages(self._system_prompt(), text)
         reply = llm_mod.complete_streaming(
             self.client,
             messages,
@@ -172,7 +173,7 @@ class Router:
         return self._run(skill.name, params)
 
     def _llm_fallback(self, text: str) -> str:
-        messages = self.memory.messages(self.config.llm.system_prompt, text)
+        messages = self.memory.messages(self._system_prompt(), text)
         try:
             reply = llm_mod.complete(
                 self.client,
@@ -229,6 +230,14 @@ class Router:
             self._skip_record = True
             log.info("memory cleared by %s", name)
         return spoken
+
+    def _system_prompt(self) -> str:
+        """The configured prompt, plus today's date when that can be believed.
+
+        Rebuilt per request rather than at startup: a service that has been up
+        for a week would otherwise be telling the model it is still Monday.
+        """
+        return self.config.llm.system_prompt + clock.grounding()
 
     def _reset_turn(self) -> None:
         """Clear per-turn state before routing.

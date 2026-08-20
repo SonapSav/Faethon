@@ -14,6 +14,16 @@ from .base import Skill
 class TimeSkill(Skill):
     name = "get_time"
     tag = "utility"
+    # Kept out of the LLM's tool list, which is unusual for a harmless
+    # read-only skill. The reason is that a tool result ends the turn: it is
+    # yielded straight to speech and never fed back for a second pass. So when
+    # the model reached for this as a *step* -- "how long until Christmas?"
+    # -- the user got "It's Thursday, August 20" and nothing else.
+    #
+    # Since the system prompt now carries the date and time on every request
+    # (see faethon/clock.py), the model has no need of the tool anyway. The
+    # regex path still answers "what time is it" instantly and for nothing.
+    regex_only = True
     description = (
         "Get the current local time, the current date, or both. "
         "Use when the user asks what time or day it is."

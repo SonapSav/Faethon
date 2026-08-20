@@ -513,6 +513,47 @@ polkit rule for `org.freedesktop.login1.reboot` or a sudoers entry plus
 dropping `NoNewPrivileges` from the unit — a real privilege for a command one
 mis-transcription away from taking the machine down. Use SSH.
 
+## Knowing what day it is
+
+The model has no idea. Ungrounded it doesn't say so — it retrieves a date from
+training data and answers from that:
+
+> **Q:** what is the date today
+> **A:** Today is Friday, March 14, 2025.
+
+Nineteen months out, and "how long until Christmas" was computed off it: 318
+days, when the answer was 127. Same shape as the identity confabulation.
+
+So every request carries the current date and time in the system prompt, built
+per request rather than at startup — a service up for a week would otherwise
+still be insisting it's Monday. About twenty tokens, fractions of a cent a
+month.
+
+**It is omitted entirely until the clock can be trusted.** This Pi has no
+battery-backed RTC, so for the first couple of minutes after a cold boot the
+wall clock is whatever was restored from disk. A wrong date is worse than no
+date, because it's exactly as confident as a right one.
+
+Two things fell out of adding it, both worth knowing before you write a skill:
+
+**A tool result ends the turn.** Skill output is yielded straight to speech and
+never fed back to the model for a second pass. That's right for skills that
+*do* something — "Volume is set to 60%" needs no rephrasing — but it means a
+model reaching for a tool as an intermediate *step* produces the tool's output
+instead of an answer. Asked "how long until Christmas", it called `get_time`
+and the reply was "It's Thursday, August 20."
+
+`get_time` is therefore `regex_only` now: with the date already in the prompt
+the model has no need of it, and the regex path still answers instantly and for
+nothing. The timer skill hit the same trap — "how long" reads as a timer query
+— and its description now says explicitly that it's only for Faethon's own
+timers.
+
+**Reasoning is off, so the model thinks in the visible reply.** Its first
+correct answer was four hundred characters of month-by-month arithmetic, read
+aloud. The grounding line ends with "give only the answer, never the
+arithmetic", which brought it to eighty-two.
+
 ## Asking it what it is
 
 Say **"what are you"**, "who made you", "are you ChatGPT", or "why do I say hey

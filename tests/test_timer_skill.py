@@ -30,11 +30,9 @@ def rig(tmp_path, monkeypatch):
     from faethon.skills import timer_skill
 
     monkeypatch.setattr(state, "state_dir", lambda: tmp_path)
-    # Path takes no attributes, so the module-level name is replaced instead.
-    monkeypatch.setattr(
-        timer_skill, "SYNC_FLAG",
-        type("Flag", (), {"exists": staticmethod(lambda: True)})(),
-    )
+    # The sync flag lives in faethon.clock now, shared with the prompt
+    # grounding. Path takes no attributes, so patch the function.
+    monkeypatch.setattr(timer_skill.clock, "is_synced", lambda: True)
 
     clock = {"wall": 1_000_000.0, "mono": 500.0}
     monkeypatch.setattr(timer_skill.time, "time", lambda: clock["wall"])
@@ -239,10 +237,7 @@ def test_nothing_is_restored_until_the_clock_is_trusted(monkeypatch, rig):
     from faethon.skills import timer_skill
 
     rig.say("set a timer for 10 minutes")
-    monkeypatch.setattr(
-        timer_skill, "SYNC_FLAG",
-        type("F", (), {"exists": staticmethod(lambda: False)})(),
-    )
+    monkeypatch.setattr(timer_skill.clock, "is_synced", lambda: False)
     fresh = rig.restart()
     assert fresh.tick() is None
     assert "aren't any timers" in rig.say("how long left")
