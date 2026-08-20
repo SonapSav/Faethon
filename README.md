@@ -434,6 +434,48 @@ The greeting also plays before the microphone is opened, which costs nothing
 and means a future rewording can't wake Faethon up at every start. A test pins
 the margin either way.
 
+## How it's doing
+
+```
+"Hey Rhasspy, what's your status"   I'm at 48 degrees, which is normal.
+                                    I'm on wi-fi, connected to HomeNet-5G.
+"How hot are you?"                  I'm at 48 degrees, which is normal.
+"What's your IP?"                   You can reach me at faethon dot local,
+                                    or at 1 9 2, 1 6 8, 0, 61.
+```
+
+One skill rather than five. `Registry.match` is first-match-wins in import
+order, so separate temperature, IP, SSID and status skills would compete over
+"how are you doing" and "what's your status", and which one won would depend on
+filenames.
+
+The temperature carries its meaning — "48 degrees, which is normal" — because a
+bare number alarms anyone who doesn't know Pi thresholds and reassures anyone
+who does. Same move `volume_skill` makes with dB.
+
+The address leads with the **hostname**, because it's stable and the IP isn't,
+and because it's the only one you can write down by ear. The IP form was
+auditioned through the speaker: the raw string ran 5.15s, digits grouped by
+octet 4.27s, and only the second is transcribable. Three-digit octets are
+spelled out since "one hundred" is ambiguous where "1 0 0" isn't.
+
+**The half that earns its keep is `tick()`.** A CPU temperature you have to ask
+for is nearly useless — you'd ask a week after the wake word started failing.
+Throttling degrades Faethon specifically: openWakeWord runs continuously, a Pi
+4 soft-throttles at 80°C, and the symptom is missed or late wake words. So it
+says so, once:
+
+> "I've had under-voltage warnings, which usually means the power supply or the
+> cable. It can make me unreliable."
+
+Under-voltage is the one worth waiting for. A marginal supply or mediocre cable
+causes intermittent trouble that looks exactly like a software bug, and
+`vcgencmd` latches the flag since boot — so it can be reported long after the
+moment that caused it, which is the only way anyone would ever catch it. Power
+is reported before heat when both are set, since the supply is the cause.
+
+Checked once a minute, not once per audio frame: `vcgencmd` forks a process.
+
 ## Weather
 
 ```
