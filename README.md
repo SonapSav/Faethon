@@ -682,6 +682,77 @@ nothing sets it otherwise, so anything run by hand used to keep its own state
 inside the checkout — meaning a timer set in the foreground was invisible to
 the service, and reading the log meant setting the variable by hand.
 
+## What it sent to the cloud
+
+```
+"Hey Rhasspy, what did you send to the cloud today?"
+
+  1 request went out today, 1 with nobody asking.
+  Your location went to the weather service once.
+```
+
+```bash
+uv run faethon-sent --days 1
+```
+
+A cloud assistant is a microphone in a private house that talks to companies.
+The honest thing is to be able to say what left, so this counts every outbound
+request.
+
+**Counted at the HTTP layer, because the turn log would understate it by about
+half.** A turn is a completed exchange; a single exchange is three or four
+requests — speech in, a completion, then two chunks of speech out. One measured
+day had **127 transcripts against 74 logged turns**. Counting turns and calling
+it "what you sent" measures the conversation, not the disclosure. So the
+counter lives in `OpenRouterClient` and in the two skills that reach the
+network without it, which is the only place that cannot disagree with reality.
+
+**Per attempt, not per success.** A retried upload crossed the wire twice, and
+a request that timed out still sent everything it was carrying. A ledger of
+what arrived safely would understate what left.
+
+**Records carry what was disclosed, not just where it went.** OpenRouter
+receives the sound of the room; Open-Meteo receives this house's coordinates to
+about ten metres. Both are "a request to a server" and they are not the same
+thing to hand over — "thirty calls to a weather API" sounds like nothing until
+it is said as *your home location, thirty times*.
+
+| kind | what it means |
+|---|---|
+| `voice` | audio recorded in this room |
+| `text` | words you said, or words it said back |
+| `location` | where this house is |
+| `account` | billing metadata only |
+
+An unlisted endpoint counts as `text`. Overstating a disclosure beats silently
+leaving a new endpoint out of the ledger.
+
+**Two counters exist for the things nobody anticipates.**
+
+Background ticks are flagged **unasked** — the dust check phones out every half
+hour whether or not anyone is home, and that is the category people never think
+of: the assistant talking to the internet about an empty house.
+
+And a microphone that opened and sent nothing is recorded as **withheld**,
+because it leaves no other trace. A follow-up window that hears no speech makes
+no `/audio/transcriptions` call at all, so a ledger of requests could only ever
+show what went out and never what was declined. It is the most reassuring true
+fact available and it was invisible.
+
+**No payloads and no transcripts** — not the audio, not the text, not the
+reply. Host, path, kind, and whether a person asked. A ledger able to recite
+your conversations back would have to be keeping your conversations, which
+defeats the thing it exists to reassure you about. That is also why it does not
+read journald, which *does* hold every transcript: answering a privacy question
+with the most privacy-invasive source on the machine is the wrong trade.
+
+The spoken answer leads with audio and consent rather than scale, because the
+real question behind it is whether the thing in the corner is listening when
+nobody asked it to. On one measured day **38 of 74 turns** were follow-up
+windows — the microphone live, audio leaving, without a wake word. That is the
+5-second window working exactly as designed, and it is still the fact most
+worth surfacing.
+
 ## Timers
 
 ```
@@ -902,6 +973,8 @@ itself out loud rather than failing silently.
 | `src/faethon/speech.py` | sentence chunking and pipelined playback |
 | `src/faethon/skills/` | skill contract, registry, and the skills themselves |
 | `src/faethon/router.py` | regex-first, LLM-fallback routing |
+| `src/faethon/turnlog.py` | one metadata line per turn |
+| `src/faethon/disclosure.py` | one line per outbound request |
 | `config.yaml` | everything machine-specific |
 
 Audio I/O shells out to `arecord`/`aplay` rather than binding PortAudio: it's
@@ -1109,3 +1182,13 @@ uv run pytest
 ```
 
 No network and no audio hardware required — the provider calls are stubbed.
+
+**And no writing to the real state directory.** An autouse fixture in
+`tests/conftest.py` points `state.state_dir()` at a temporary path for every
+test. That is not tidiness. The disclosure ledger writes on each outbound
+request, the fake clients here make requests to a path called `x`, and
+`state_dir()` resolves to `/var/lib/faethon` whenever it exists — so a full
+test run silently appended forty rows to the live privacy ledger, the one file
+whose entire value is being an accurate record of what actually happened. The
+timers and the turn log had the same exposure and nobody had noticed, because
+their rows look plausible. The ledger's did not.
