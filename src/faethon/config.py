@@ -213,10 +213,20 @@ class TTSConfig(BaseModel):
     #: Fallback only -- the real rate comes from the response Content-Type.
     sample_rate: int = 24000
     #: USD per 1000 characters of input text, used to estimate what speaking
-    #: cost. The speech endpoint returns raw audio with no usage body, so
-    #: nothing else can account for it -- and it is the largest part of a turn.
+    #: cost. The speech endpoint returns raw audio with no usage body,
+    #: /generation 404s for gen-tts ids and /activity needs a provisioning key,
+    #: so nothing else can account for it -- and it is the largest part of a
+    #: turn by an order of magnitude.
+    #:
+    #: Measured against /credits with the service stopped: 1124 characters
+    #: billed $0.01686 and 450 characters billed $0.00675, both exactly
+    #: 0.000015 a character, which is the quoted fish-audio/s1 price at one
+    #: token per character. The second sample spoke at 5.8 characters a second
+    #: against the first's 8.7, and the per-character figure did not move --
+    #: which is what rules out billing on the audio produced.
+    #:
     #: 0 disables the estimate rather than reporting a wrong one.
-    cost_per_1k_chars: float = Field(0.0032, ge=0.0)
+    cost_per_1k_chars: float = Field(0.015, ge=0.0)
 
 
 class Settings(BaseSettings):

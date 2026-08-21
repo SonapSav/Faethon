@@ -146,13 +146,31 @@ def test_it_waits_before_deciding():
 
 
 def test_speaking_cost_scales_with_the_text_sent():
-    """Billed on input text, not audio produced. Measured: five calls
-    totalling 345 characters cost $0.001107, i.e. $0.0032 per thousand."""
+    """Billed on input text, not audio produced.
+
+    Measured against /credits with the service stopped: 1124 characters billed
+    $0.01686 and 450 characters billed $0.00675, both exactly $0.000015 a
+    character. The 450-character sample was deliberately full of pauses and
+    spoke at 5.8 characters a second against the other's 8.7 -- the
+    per-character figure did not move, which is what rules out duration.
+    """
     from faethon.providers.tts import estimate_cost
 
-    assert estimate_cost("x" * 1000, 0.0032) == pytest.approx(0.0032)
-    assert estimate_cost("x" * 345, 0.0032) == pytest.approx(0.001104, abs=1e-6)
-    assert estimate_cost("", 0.0032) == 0.0
+    assert estimate_cost("x" * 1000, 0.015) == pytest.approx(0.015)
+    assert estimate_cost("x" * 1124, 0.015) == pytest.approx(0.01686, abs=1e-8)
+    assert estimate_cost("x" * 450, 0.015) == pytest.approx(0.00675, abs=1e-8)
+    assert estimate_cost("", 0.015) == 0.0
+
+
+def test_the_shipped_rate_is_the_measured_one():
+    """A guessed 0.0032 sat here for weeks and understated every turn by 4.7x.
+
+    Pinned so the number cannot drift back to a plausible-looking guess
+    without someone re-measuring and changing this line deliberately.
+    """
+    from faethon.config import load_config
+
+    assert load_config().tts.cost_per_1k_chars == pytest.approx(0.015)
 
 
 def test_a_zero_rate_disables_the_estimate_rather_than_guessing():

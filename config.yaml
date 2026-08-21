@@ -377,7 +377,11 @@ tts:
   #
   # Re-measure if you change tts model, or set 0 to leave it out rather than
   # report a number from the wrong price list.
-  cost_per_1k_chars: 0.0032
+  # Measured against /credits, not quoted: 1124 chars billed $0.01686 and
+  # 450 chars billed $0.00675 -- both exactly $0.000015 a character. The two
+  # samples spoke at different rates and the figure did not move, so billing
+  # follows the text sent, not the audio produced.
+  cost_per_1k_chars: 0.015
 
   # Fallback only. The real rate is read from the response Content-Type, since
   # models disagree (Fish Audio 44.1 kHz, Kokoro and Deepgram 24 kHz) and

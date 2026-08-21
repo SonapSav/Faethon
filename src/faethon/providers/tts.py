@@ -44,13 +44,23 @@ def estimate_cost(text: str, cost_per_1k_chars: float) -> float:
 
     An estimate because the speech endpoint returns raw audio and no usage
     body, so unlike every other leg there is nothing authoritative to read.
-    /generation returns 404 for TTS ids, and /credits updates in batches too
-    coarse to attribute a single call.
+    /generation returns 404 for gen-tts ids, and /activity needs a provisioning
+    key rather than an API key.
 
-    Billed on the text sent rather than the audio produced: OpenRouter quotes
-    fish-audio/s1 at 0.000015 per input token, and five calls totalling 345
-    characters cost $0.001107 -- $0.0032 per thousand characters, which agrees
-    with the quoted price at roughly four characters to the token.
+    Billed on the text sent rather than the audio produced. Measured against
+    /credits with the service stopped: 1124 characters billed $0.01686, 450
+    characters billed $0.00675 -- both exactly $0.000015 a character, which is
+    the quoted fish-audio/s1 price at one token per character. The second
+    sample was deliberately full of pauses and spoke at 5.8 characters a
+    second against the first's 8.7; the per-character figure did not move,
+    which is what rules out billing on duration.
+
+    A warning about how that was measured, because it caught me: /credits
+    lands in batches up to two minutes late, and sits perfectly still in the
+    meantime. Readings taken as soon as the figure "settled" understated the
+    bill by more than half and made duration look like the better fit. Any
+    future calibration has to wait out a fixed several minutes rather than
+    poll for stability.
 
     Leaving this uncounted understated a turn several times over, because
     speaking is the most expensive thing Faethon does.
