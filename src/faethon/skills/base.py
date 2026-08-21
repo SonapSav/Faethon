@@ -81,6 +81,13 @@ class Skill(ABC):
             },
         }
 
+    #: Whether an announcement from this skill was asked for. "requested"
+    #: bypasses quiet hours -- you set the timer, so it should go off when you
+    #: said, even at 3am. "informational" is held until morning, and because
+    #: the budget is checked before tick() is called, a held announcement is
+    #: deferred rather than lost: the skill keeps its state and offers again.
+    announce_urgency: ClassVar[str] = "informational"
+
     def tick(self) -> str | None:
         """Called repeatedly while Faethon is idle, and between turns.
 

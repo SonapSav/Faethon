@@ -119,6 +119,23 @@ class TurnLogConfig(BaseModel):
     max_mb: float = Field(5.0, ge=0.0)
 
 
+class AnnouncementConfig(BaseModel):
+    """When Faethon may speak without being asked.
+
+    Eight things can already do so and nothing coordinated them, so each
+    decided on its own to say its piece once. That reads fine one at a time and
+    worse with every source added.
+    """
+
+    #: Informational announcements are held between these. A timer is not
+    #: informational -- you asked for it, and an eight-hour one should go off
+    #: when it goes off. Equal times disable quiet hours.
+    quiet_start: str = "22:30"
+    quiet_end: str = "07:30"
+    #: Never two announcements in a row without a pause between them.
+    min_gap_seconds: float = Field(30.0, ge=0.0)
+
+
 class CreditConfig(BaseModel):
     """Warning before the account runs dry.
 
@@ -205,6 +222,7 @@ class Config(BaseModel):
     wake: WakeConfig
     utterance: UtteranceConfig
     conversation: ConversationConfig = ConversationConfig()
+    announcements: AnnouncementConfig = AnnouncementConfig()
     credit: CreditConfig = CreditConfig()
     turn_log: TurnLogConfig = TurnLogConfig()
     weather: WeatherConfig = WeatherConfig()

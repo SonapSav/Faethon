@@ -17,7 +17,7 @@ import pytest
 from faethon.__main__ import ACK_SOUND, CLOSE_SOUND, Faethon
 from faethon.config import load_config
 from faethon.skills.registry import Registry
-from faethon.status import Announcer, SilenceWatch
+from faethon.status import Announcer, Quiet, SilenceWatch
 
 
 class FakeStream:
@@ -62,6 +62,7 @@ def rig(monkeypatch):
                 self.faethon.config.audio.frame_ms
             )
             self.faethon._capture_failures = 0
+            self.faethon.quiet = Quiet("00:00", "00:00", 0.0)   # never quiet
             # Empty: these tests are about the loop, not about what ticks in it.
             self.faethon.registry = Registry([])
             self.events = events
@@ -559,3 +560,77 @@ def test_the_turn_log_carries_no_transcript(turn):
     """Only how long it was. journald already keeps the words."""
     turn._handle_turn(lambda: b"")
     assert "hello" not in str(turn.seen["logged"][0])
+
+
+def test_quiet_hours_defer_rather_than_lose_an_announcement(rig, monkeypatch):
+    """The budget is checked before tick(), so a skill that is never ticked
+    keeps its say-once state and offers the same thing again in the morning.
+    Checking after would consume the warning and drop it."""
+    from datetime import time as dt_time
+
+    from faethon import __main__ as main_mod
+    from faethon.skills.base import Skill
+    from faethon.status import Quiet
+
+    ticks = []
+
+    class Nagger(Skill):
+        name, tag, description = "nagger", "test", "informational"
+        announce_urgency = "informational"
+
+        def tick(self):
+            ticks.append(1)
+            return "under-voltage warnings"
+
+        def run(self, **params):
+            return ""
+
+    played = []
+    monkeypatch.setattr(main_mod.playback, "play_wav", lambda p, d: played.append(1))
+    monkeypatch.setattr(Faethon, "_speak", lambda self, text: played.append(1))
+    rig.faethon.registry = Registry([Nagger()])
+
+    class Stream:
+        def __call__(self): return b"\x00\x00" * 1280
+        def drain(self): return 0
+
+    rig.faethon.quiet = Quiet("22:30", "07:30", 0.0, clock=lambda: dt_time(3, 0))
+    rig.faethon._tick_skills(Stream())
+    assert ticks == [], "the skill was ticked during quiet hours"
+    assert played == []
+
+    rig.faethon.quiet = Quiet("22:30", "07:30", 0.0, clock=lambda: dt_time(9, 0))
+    rig.faethon._tick_skills(Stream())
+    assert ticks == [1], "the deferred announcement was never offered again"
+    assert played, "it should have been spoken in the morning"
+
+
+def test_a_requested_announcement_survives_quiet_hours(rig, monkeypatch):
+    from datetime import time as dt_time
+
+    from faethon import __main__ as main_mod
+    from faethon.skills.base import Skill
+    from faethon.status import Quiet
+
+    class Alarm(Skill):
+        name, tag, description = "alarm", "test", "requested"
+        announce_urgency = "requested"
+
+        def tick(self):
+            return "your timer is up"
+
+        def run(self, **params):
+            return ""
+
+    said = []
+    monkeypatch.setattr(main_mod.playback, "play_wav", lambda p, d: None)
+    monkeypatch.setattr(Faethon, "_speak", lambda self, text: said.append(text))
+    rig.faethon.registry = Registry([Alarm()])
+    rig.faethon.quiet = Quiet("22:30", "07:30", 0.0, clock=lambda: dt_time(3, 0))
+
+    class Stream:
+        def __call__(self): return b"\x00\x00" * 1280
+        def drain(self): return 0
+
+    rig.faethon._tick_skills(Stream())
+    assert said == ["your timer is up"]

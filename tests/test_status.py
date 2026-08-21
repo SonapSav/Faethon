@@ -342,3 +342,90 @@ def test_the_wording_matches_the_threshold():
     )
     script = (PROJECT_ROOT / "scripts" / "make_speech.py").read_text()
     assert "below half a dollar" in script
+
+
+# -- the silence budget ------------------------------------------------------
+# Eight things could speak unprompted and nothing coordinated them. Each
+# decided alone to say its piece once, which reads fine one at a time and worse
+# with every source added -- and none of them knew what time it was, so a
+# latched under-voltage flag would announce itself at three in the morning.
+
+
+from datetime import time as dt_time  # noqa: E402
+
+from faethon.status import Quiet  # noqa: E402
+
+
+def quiet(at="12:00", start="22:30", end="07:30", gap=30.0):
+    clock = Clock()
+    hh, mm = (int(x) for x in at.split(":"))
+    return Quiet(start, end, gap, now=clock, clock=lambda: dt_time(hh, mm)), clock
+
+
+def test_informational_announcements_wait_for_morning():
+    q, _ = quiet(at="03:00")
+    assert q.allows("informational") is False
+
+
+def test_a_timer_goes_off_when_you_asked_it_to():
+    """You set it. An eight-hour timer set at seven in the evening should go
+    off at three in the morning -- that is the whole point of setting it."""
+    q, _ = quiet(at="03:00")
+    assert q.allows("requested") is True
+
+
+def test_daytime_allows_everything():
+    q, _ = quiet(at="12:00")
+    assert q.allows("informational") is True
+    assert q.allows("requested") is True
+
+
+@pytest.mark.parametrize("at,quiet_now", [
+    ("22:29", False), ("22:30", True), ("23:59", True),
+    ("00:01", True), ("07:29", True), ("07:30", False), ("12:00", False),
+])
+def test_the_window_crosses_midnight(at, quiet_now):
+    """The normal shape for a night window, and the easy one to get wrong."""
+    q, _ = quiet(at=at)
+    assert q.in_quiet_hours is quiet_now
+
+
+def test_equal_times_disable_quiet_hours():
+    q, _ = quiet(at="03:00", start="00:00", end="00:00")
+    assert q.in_quiet_hours is False
+    assert q.allows("informational") is True
+
+
+def test_an_unparseable_time_does_not_stop_faethon_starting():
+    """A typo in config.yaml should not be fatal at startup."""
+    q = Quiet("half past ten", "07:30", 0.0, clock=lambda: dt_time(3, 0))
+    assert q.allows("informational") is True
+
+
+# -- not two in a row --------------------------------------------------------
+
+
+def test_a_second_announcement_waits_for_the_gap():
+    """A timer coming due in the same turn the credit warning crosses gave
+    chime, sentence, chime, sentence, with no pause between them."""
+    q, clock = quiet(gap=30.0)
+    assert q.allows() is True
+    q.spoke()
+    assert q.allows() is False
+    clock.advance(31)
+    assert q.allows() is True
+
+
+def test_the_gap_applies_to_timers_too():
+    """Quiet hours do not hold a timer, but two announcements still should not
+    tread on each other."""
+    q, clock = quiet(at="03:00", gap=30.0)
+    assert q.allows("requested") is True
+    q.spoke()
+    assert q.allows("requested") is False
+
+
+def test_a_zero_gap_disables_it():
+    q, _ = quiet(gap=0.0)
+    q.spoke()
+    assert q.allows() is True

@@ -44,6 +44,7 @@ from .status import (
     NO_NETWORK,
     Announcer,
     CreditWatch,
+    Quiet,
     SilenceWatch,
     classify,
 )
@@ -87,6 +88,11 @@ class Faethon:
         )
         self._running = True
         self.announcer = Announcer(config.audio.output_device)
+        self.quiet = Quiet(
+            config.announcements.quiet_start,
+            config.announcements.quiet_end,
+            config.announcements.min_gap_seconds,
+        )
         self.silence = SilenceWatch(config.audio.frame_ms)
         #: Consecutive failures to open the capture stream, so recovery can be
         #: reported. A USB microphone can take minutes to appear after a cold
@@ -370,7 +376,7 @@ class Faethon:
         log.info("microphone back after %d attempt(s)", self._capture_failures)
         self._capture_failures = 0
         if self.announcer.forget(NO_MIC):
-            self.announcer.say(MIC_BACK)
+            self._announce_status(MIC_BACK)
 
     def _balance(self) -> float | None:
         """Remaining OpenRouter credit, or None if it can't be read.
@@ -394,6 +400,12 @@ class Faethon:
         not take down the loop that is listening for the wake word.
         """
         for skill in self.registry:
+            # Checked *before* ticking, deliberately. A skill that is never
+            # ticked keeps its say-once state, so a held announcement is
+            # deferred to the end of quiet hours rather than consumed and
+            # lost. That is what makes this need no queue.
+            if not self.quiet.allows(skill.announce_urgency):
+                continue
             try:
                 said = skill.tick()
             except Exception:  # noqa: BLE001
@@ -414,6 +426,16 @@ class Faethon:
                 )
                 return
 
+    def _announce_status(self, status: str) -> None:
+        """Play a status clip from outside a turn.
+
+        Unprompted, so it goes through the budget -- unlike the same clips
+        played during a turn, where the user is standing there waiting and the
+        clip is an answer rather than an announcement.
+        """
+        if self.quiet.allows() and self.announcer.say(status):
+            self.quiet.spoke()
+
     def _announce(self, text: str) -> None:
         """Say something nobody asked for: chime first, then the words.
 
@@ -424,6 +446,7 @@ class Faethon:
         log.info("announcing: %s", text)
         playback.play_wav(TIMER_SOUND, self.config.audio.output_device)
         self._speak(text)
+        self.quiet.spoke()
 
     def _greet(self) -> None:
         """Say hello once, before the microphone is ever opened.
@@ -458,7 +481,7 @@ class Faethon:
                 # Keep trying: it usually comes back.
                 self._capture_failures += 1
                 log.error("audio capture lost: %s -- retrying in 3s", e)
-                self.announcer.say(NO_MIC)
+                self._announce_status(NO_MIC)
                 time.sleep(3)
 
     def _listen_once(self) -> None:
@@ -494,7 +517,7 @@ class Faethon:
                     # mic with a flat transmitter hands over digital silence
                     # forever and looks perfectly healthy doing it.
                     log.error("microphone has been silent for minutes")
-                    self.announcer.say(NO_MIC)
+                    self._announce_status(NO_MIC)
                 if self.detector.process(frame) is not None:
                     self._converse(read_frame)
                     # Flush the wake model: the tail of Faethon's own reply may

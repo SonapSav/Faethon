@@ -139,6 +139,9 @@ class Timer:
 class TimerSkill(Skill):
     name = "set_timer"
     tag = "utility"
+    # You asked for it. An eight-hour timer set at seven in the evening should
+    # go off at three in the morning, which is the whole point of setting it.
+    announce_urgency = "requested"
     description = (
         "Set, check or cancel a countdown timer that Faethon is running. "
         "Timers can be named, several can run at once, and Faethon announces "

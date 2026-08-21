@@ -168,6 +168,31 @@ turn_log:
   # out, and a log nobody prunes is a slow way to fill one. 0 never rotates.
   max_mb: 5
 
+announcements:
+  # When Faethon may speak without being asked.
+  #
+  # Eight things can already do so -- timers, thermal and under-voltage
+  # warnings, and the status clips for a lost microphone, a lost network and a
+  # low balance -- and nothing coordinated them. Each decided on its own to say
+  # its piece once, which reads fine one at a time and worse with every source
+  # added. None of them knew what time it was either, so a latched
+  # under-voltage flag would announce itself at three in the morning.
+  #
+  # Informational announcements are held between these two times. A timer is
+  # not informational: you asked for it, and an eight-hour one set in the
+  # evening should go off when you said. Set both the same to disable.
+  #
+  # A held announcement is deferred, not lost -- the budget is checked before a
+  # skill is ticked, so the skill keeps its state and offers the same thing
+  # again once quiet hours end.
+  quiet_start: "22:30"
+  quiet_end: "07:30"
+
+  # Never two announcements in a row without a pause. A timer coming due in the
+  # same moment the credit warning crosses otherwise gives chime, sentence,
+  # chime, sentence, with nothing between them. 0 disables.
+  min_gap_seconds: 30
+
 credit:
   # Warn before the account runs dry. At zero every leg stops -- no
   # transcription, no thinking, no speech -- so the failure is total silence

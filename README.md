@@ -365,6 +365,37 @@ over frames — of digital silence, indefinitely, looking perfectly healthy. So
 minutes. A live mic in a silent room never is: measured here, a quiet room
 still peaks at 2–4 per frame.
 
+## When it may speak unprompted
+
+Eight things can talk without being asked — timers, thermal and under-voltage
+warnings, and the status clips for a lost microphone, a lost network and a low
+balance. Each decides on its own to say its piece once, which reads fine one at
+a time and worse with every source added. So there's one place that sees them
+all:
+
+```yaml
+announcements:
+  quiet_start: "22:30"
+  quiet_end: "07:30"
+  min_gap_seconds: 30
+```
+
+The split that makes it simple isn't by message, it's by **whether you asked
+for it**. A timer firing is *requested* — you set it, and an eight-hour timer
+set in the evening should go off at three in the morning, because that's the
+point of setting it. An under-voltage warning is *informational*: nobody asked,
+the flag is latched, and it can wait until morning. Skills declare which they
+are with `announce_urgency`.
+
+**A held announcement is deferred, not dropped.** The budget is checked *before*
+a skill is ticked, so a skill that's never ticked keeps its say-once state and
+offers the same thing again once quiet hours end. That ordering is what makes
+this need no queue and no re-delivery.
+
+Anything said *during* a turn is exempt and never reaches the budget. If
+transcription fails and Faethon says so, you're standing there waiting — that's
+an answer, not an announcement.
+
 Each status is announced once and then suppressed until something works again —
 an outage lasts as long as it lasts, and repeating it every attempt turns
 information into nagging.
