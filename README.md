@@ -33,16 +33,36 @@ initial synthesis, not a gap between sentences).
 ## What it costs
 
 Per spoken turn, roughly: Whisper Large v3 Turbo at $0.00000333/unit, DeepSeek
-V4 Flash at $0.08/M input and $0.16/M output, Fish Audio S1 at $0.0032 per
-thousand characters of input text. Call it pennies a month for household use.
+V4 Flash at $0.08/M input and $0.16/M output, MAI-Voice-2-Flash at $0.015 per
+thousand characters of input text. In practice that is **about $2.24 a month**
+of household use — measured over 17 hours of real turns, not guessed.
 `faethon-probe` prints the actual cost of each call.
 
-**Speaking is the expensive part**, and it is the one leg with no usage to
-read: `/audio/speech` returns raw audio, `/generation` 404s for TTS ids, and
-`/credits` updates in batches too coarse to attribute a single call. So it is
-estimated from the text sent, via `tts.cost_per_1k_chars`. Until that existed
-the turn line omitted it entirely and reported a turn at a fraction of what it
-actually cost.
+**Speaking is the expensive part** — around 83% of a turn — and it is the one
+leg with no usage to read: `/audio/speech` returns raw audio, `/generation`
+404s for TTS ids, and `/activity` needs a management key rather than an API
+key. So it is estimated from the text sent, via `tts.cost_per_1k_chars`.
+
+That constant was wrong for weeks. It sat at `0.0032`, a plausible-looking
+figure from a single small sample, when the real rate is `0.015` — so every
+cost Faethon reported understated the bill by **4.7×**, and `faethon-turns`
+projected $0.76 a month against a true $2.24. Two credit readings taken either
+side of a live session are what exposed it: $0.0144 actually spent against
+$0.00432 reported.
+
+The rate is now measured rather than quoted, against `/credits` with the
+service stopped: 1124 characters billed $0.01686 and 450 characters billed
+$0.00675, both exactly $0.000015 a character. A deliberately pause-heavy sample
+spoke at 5.8 characters a second against the other's 8.7 and the per-character
+figure did not move, which is what rules out billing on audio duration. End to
+end the estimate now matches the bill to the cent.
+
+**If you re-measure this, do not poll `/credits` for stability.** It lands in
+batches up to two minutes late and sits perfectly still while the charge is
+queued, so "wait until the number stops moving" returns early and reports a
+fraction of the bill. That under-counting is what made duration look like the
+better model. Drain for two minutes, fire the batch, then wait a fixed three to
+four minutes. A test pins the shipped rate so it cannot drift back to a guess.
 
 ## Requirements
 
@@ -247,9 +267,12 @@ thing from what was asked.
 Each change is spoken back as a percentage of the dial — one level is one
 tenth, so level 7 announces **"Volume is set to 70%."** and level 0 says
 **"Volume is set to 0%, muted."**, since 0% alone leaves it unclear whether the
-speaker is silent or merely turned right down. The literal `%` is safe: Fish
-Audio pronounces it, measured at 2.04s of audio against 2.09s for the word
-spelled out and 1.72s with the sign removed.
+speaker is silent or merely turned right down. The literal `%` is safe:
+MAI-Voice-2-Flash pronounces it, verified by round-tripping the clip back
+through Whisper — `"Volume is set to 70%."` and `"Volume is set to 70
+percent."` render to identical 2.29s of audio and transcribe identically. Worth
+re-checking against any TTS model you switch to, since a model that silently
+dropped the sign would announce `"Volume is set to 70"`.
 
 The mapping is the part worth knowing about. ALSA's PCM control on a Pi is
 scaled in **dB**, and the percentage `amixer` prints is a linear position in
@@ -367,11 +390,11 @@ still peaks at 2–4 per frame.
 
 ## When it may speak unprompted
 
-Eight things can talk without being asked — timers, thermal and under-voltage
-warnings, and the status clips for a lost microphone, a lost network and a low
-balance. Each decides on its own to say its piece once, which reads fine one at
-a time and worse with every source added. So there's one place that sees them
-all:
+Nine things can talk without being asked — timers, thermal and under-voltage
+warnings, dust and UV crossings, and the status clips for a lost microphone, a
+lost network and a low balance. Each decides on its own to say its piece once,
+which reads fine one at a time and worse with every source added. So there's
+one place that sees them all:
 
 ```yaml
 announcements:
@@ -386,6 +409,14 @@ set in the evening should go off at three in the morning, because that's the
 point of setting it. An under-voltage warning is *informational*: nobody asked,
 the flag is latched, and it can wait until morning. Skills declare which they
 are with `announce_urgency`.
+
+A dust warning is *informational*, so the quiet hours hold it overnight. It is
+also **say-once and persistent**: the flag survives a restart, or a voice
+restart during a dust storm would re-announce the same dust every time. It
+re-arms when the reading drops back below the threshold, and is forgotten after
+a gap in observation long enough that the episode could have ended and a new
+one begun unseen (`air.stale_after_hours`, default 6). A reboot stays silent; a
+night with the Pi switched off does not.
 
 **A held announcement is deferred, not dropped.** The budget is checked *before*
 a skill is ticked, so a skill that's never ticked keeps its say-once state and
@@ -544,6 +575,61 @@ only when that differs by four degrees or more — here in August the gap is
 routinely seven. Forecasts are cached for ten minutes, because a conversation
 about the weather otherwise fetches the same hourly data three times.
 
+## Air quality, dust and UV
+
+```
+"Hey Rhasspy, what's the air quality"   The air is very poor in Abu Dhabi, mostly dust.
+"Is it dusty?"                          Dust is 310 micrograms in Abu Dhabi.
+"What's the UV index?"                  The UV index is 9 in Abu Dhabi, which is very high.
+"Do I need sunscreen?"                  (same — routed by capture group)
+"Will it be dusty tomorrow?"            Dust should peak around 307 micrograms tomorrow in Abu Dhabi.
+"Is the dust going to clear?"           It should ease off. Dust is around 321 micrograms today,
+                                        down to about 132 micrograms by Monday.
+```
+
+Open-Meteo again, keyless, at the same coordinates as the weather so the two
+cannot drift apart.
+
+**Dust is why this exists.** It is the weather that changes your day here and is
+completely invisible to a temperature forecast — on the afternoon this was
+built the weather skill said *"It's 45 and clear in Abu Dhabi"* while dust sat
+at 310 µg/m³ and the European index read very poor. Both sentences were true;
+only one was useful.
+
+**One skill, not three.** Air, dust and UV share an endpoint, a cache, a
+location and a config section, and *"is it safe to go outside"* belongs to all
+of them. Splitting them would duplicate that to gain nothing and put three
+skills in competition for the same phrases — which `Registry.match` settles by
+import order rather than by fit. That ordering matters more than usual here:
+discovery walks the package alphabetically, so `air_skill` matches ahead of
+every other skill. Its patterns are `_END`-anchored for that reason, and a test
+asserts the weather, health, time and credit phrases still reach their owners.
+
+**Readings carry their meaning**, the same move `volume_skill` makes with dB and
+`health_skill` with thermals — "very poor, mostly dust" rather than "PM10 is
+222". Dust is named as the cause only when it is most of the PM10, so the
+attribution is earned. A number nobody can place is not an answer.
+
+**The forecast half is lopsided, because the API is.** UV has a real daily
+aggregate (`uv_index_max`) that the model produces itself, used as-is. Dust and
+the air index are hourly only — there is no `european_aqi_max`, and asking for
+one is a 400 — so their daily figures are aggregated here from 24 hourly
+values, taking the *peak* rather than the mean: the question behind "will it be
+dusty tomorrow" is whether it gets bad at any point, not what it averaged while
+you were asleep.
+
+**Three days, though the API serves seven.** The decay measured while writing
+this — 321, 307, 219, 132, 112 — is real signal through about day three and
+thins after. The tool description says so explicitly, so the model declines
+rather than inventing a Thursday.
+
+Days are named from the API's own date strings rather than the local clock. The
+Pi has no RTC, and a weekday is exactly what it would get wrong in the first
+seconds after a cold boot.
+
+Current, hourly and daily ride in **one 3.8 kB request**, so the forecast costs
+no extra round trip and the 15-minute cache serves all of it.
+
 ## The turn log
 
 One line per turn in `/var/lib/faethon/turns.jsonl`, so the next threshold can
@@ -576,6 +662,15 @@ happened to be in the journal when it was written.
 **Metadata only — routes, latencies, costs, text lengths, never transcripts.**
 journald already keeps the words, and whether it should is a live decision;
 recording them a second time here would answer it by accident.
+
+Each row records the `tts_rate` it was costed at, and the report **recosts rows
+written before that rate was measured** — exactly, from their `said_chars`,
+rather than flagging them. Without that, 43 rows priced at the old $0.0032
+dragged the projection to $0.76 a month against a true $2.24, which is precisely
+the number someone uses to judge how long their balance lasts. It says how many
+rows it touched rather than quietly presenting a corrected total as if it had
+always been right. A row carrying its own rate is left alone even when that
+differs from today's — a genuine price change is history, not an error.
 
 It rotates one generation back at `max_mb`, because an SD card is the part of a
 Pi that wears out. And it never raises: a log that can break a turn is worse
@@ -855,37 +950,73 @@ Almost none of the delay is the Pi. Wake-word inference is 13ms per 80ms frame
 The speaker consumes audio at exactly 1× real time. If synthesis is slower than
 that, the card runs dry between sentences and **ALSA underruns** — recovery
 costs far more than the gap itself, and a 4.4s reply stretched to 19s of wall
-clock before this was understood. So the metric that matters is not price, it's
-whether the model can deliver audio faster than it's spoken.
+clock before this was understood.
 
-Benchmarked 2026-08-17, 3 trials each, one sentence:
+That rules models out, but it no longer decides between them. Every current
+candidate generates several times faster than the speech plays, so synthesis
+never becomes the bottleneck and total generation time is a red herring. What
+you actually wait through is **time to first audio**, because Faethon streams
+and starts speaking on the first chunk.
 
-| model | reliability | to first byte | total | rate | per 1000 replies |
+Re-benchmarked 2026-08-21 on a real announcement, six calls each:
+
+| model | to first audio | worst of 6 | rate | voices | per 1M chars |
 |---|---|---|---|---|---|
-| **fish-audio/s1** | 3/3 | **0.34s** | **1.17s** | 44100 | $1.05 |
-| deepgram/aura-2 | 3/3 | 0.48s | 2.51s | 24000 | $2.10 |
-| deepgram/flux-tts:free | 3/3 | 1.32s | 3.97s | 24000 | free |
-| sesame/csm-1b | 3/3 | 5.71s | 6.43s | 24000 | $0.49 |
-| hexgrad/kokoro-82m | 0/3 | — | — | — | $0.04 |
+| **microsoft/mai-voice-2-flash** | **0.35s** | 0.88s | 24000 | Azure catalogue | $15 |
+| fish-audio/s1 | 0.43s | **0.53s** | 44100 | 1 | $15 |
+| x-ai/grok-voice-tts-1.0 | 0.50s | 1.38s | 24000 | 5 | $15 |
+| fish-audio/s2.1-pro-free | 0.50s | 0.86s | 44100 | n/a | free |
+| deepgram/flux-tts:free | 0.51s | 1.62s | 24000 | 36 | free |
+| qwen/qwen-audio-3.0-tts-flash | — | — | — | undiscoverable | $15 |
+| sesame/csm-1b | 5.71s | — | 24000 | several | $7 |
+| hexgrad/kokoro-82m | hangs | — | 24000 | 54 | $0.62 |
 
-Fish S1 returns 3.95s of audio in 1.17s — 3.4× real time, with headroom to
-spare. Kokoro is by far the cheapest and was the original choice, but it began
-returning HTTP 200 and then hanging mid-body; it's worth retrying if you want
-the saving.
+**MAI-Voice-2-Flash is the current choice**, in `en-US-AndrewNeural`. It is
+quicker than Fish S1 in the middle and looser in the tail, so this is not a
+clean latency win — it is a win on voice choice at no latency cost. S1 remains
+the most consistent model measured, and switching back is two lines of config.
 
-Two gotchas the code now handles for you:
+It also returned byte-identical output across all six calls, which nothing else
+did. Deterministic synthesis means no speaker drift between renders.
 
-- **Sample rates differ.** Fish Audio returns 44.1kHz, Kokoro and Deepgram
-  24kHz. Playing one at the other's rate isn't subtle — 44.1k played as 24k
-  runs at 0.54× speed. The rate is read from the response `Content-Type`;
+**Voice pace matters more than the numbers above.** The same announcement runs
+6.0s in `en-US-AndrewNeural` against 8.1s in `en-AU-NatashaNeural` — 35% off
+the wait on every reply, dwarfing the 0.1–0.2s differences in first-audio time.
+It costs nothing either way, since billing is per character rather than per
+second.
+
+**Qwen is unusable**, not slow. It rejects a request with no voice, refuses to
+enumerate its voices, and twelve documented DashScope names were all rejected.
+A model whose voices you cannot name cannot be shipped.
+
+**The free tier is a real lever if cost bites.** Speech is ~83% of spend, so a
+free model takes the bill from ~$2.24/month to ~$0.38. The catches: Deepgram
+Flux has the worst tail of anything measured (1.62s), and Fish S2.1 Pro Free
+takes no voice parameter and carries no stated availability guarantee.
+
+Three gotchas the code handles for you:
+
+- **Sample rates differ.** Fish Audio returns 44.1kHz, most others 24kHz.
+  Playing one at the other's rate isn't subtle — 44.1k played as 24k runs at
+  0.54× speed. The rate is read from the response `Content-Type`;
   `tts.sample_rate` in the config is only a fallback.
-- **Voices differ, and an empty voice is not a default.** Fish Audio S1 offers
-  exactly one, `alloy`, and you have to ask for it: omitting the field does not
-  fall back to a fixed speaker, it picks a different one per request. Measured
-  over five renders of one sentence, pitch ranged 99–156 Hz unset against
-  101–116 Hz with `alloy` — a different person each time you ask Faethon
-  anything. Deepgram requires a voice outright. To see a provider's voices,
-  send a bogus one; the 400 lists them.
+- **An empty voice is not a default.** Several providers, MAI among them,
+  reject a request with no voice outright. Those that accept one pick a
+  different speaker per request: measured over five renders of one sentence on
+  Fish S1, pitch ranged 99–156 Hz unset against 101–116 Hz with `alloy` — a
+  different person each time you ask Faethon anything.
+- **To see a provider's voices, send a bogus one.** The 400 sometimes
+  enumerates them — Deepgram does, Fish and MAI do not. MAI takes Azure neural
+  names; `en-US-AndrewNeural`, `en-US-AvaNeural`, `en-US-EmmaNeural`,
+  `en-US-BrianNeural`, `en-GB-SoniaNeural`, `en-GB-RyanNeural` and
+  `en-AU-NatashaNeural` are all confirmed working.
+
+**Changing the voice means re-rendering `assets/*.wav`**, or Faethon greets you
+in one voice and apologises for a network outage in another. Run
+`uv run python scripts/make_speech.py`, then re-score every clip against the
+wake model — a clip that crosses the threshold would make Faethon wake itself,
+and the failure clips play precisely when it cannot reach the network to
+recover. The current set peaks at 0.0004 against a threshold of 0.7.
 
 ## A note on the LLM
 
