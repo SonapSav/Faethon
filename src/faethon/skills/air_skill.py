@@ -192,20 +192,29 @@ class AirSkill(Skill):
 
     # -- the network ------------------------------------------------------
 
+    def _get(self, url: str, params: dict) -> dict:
+        """The one seam tests stub, so the caching above it stays under test.
+
+        Stubbing _fetch instead hid a real bug: tick() was rebuilding the cache
+        from only the current block, and no test noticed because no test ever
+        reached the genuine cache.
+        """
+        with httpx.Client(timeout=TIMEOUT_SEC) as client:
+            r = client.get(url, params=params)
+            r.raise_for_status()
+            return r.json()
+
     def _fetch(self, lat: float, lon: float, use_cache: bool = True) -> dict:
         if use_cache and self._cache and time.monotonic() - self._cache[0] < CACHE_SEC:
             return self._cache[1]
-        with httpx.Client(timeout=TIMEOUT_SEC) as client:
-            r = client.get(AIR_URL, params={
-                "latitude": lat, "longitude": lon,
-                "current": "pm10,pm2_5,dust,uv_index,european_aqi",
-                "hourly": "dust,pm10,european_aqi",
-                "daily": "uv_index_max",
-                "timezone": "auto",
-                "forecast_days": FORECAST_DAYS,
-            })
-            r.raise_for_status()
-            data = r.json()
+        data = self._get(AIR_URL, {
+            "latitude": lat, "longitude": lon,
+            "current": "pm10,pm2_5,dust,uv_index,european_aqi",
+            "hourly": "dust,pm10,european_aqi",
+            "daily": "uv_index_max",
+            "timezone": "auto",
+            "forecast_days": FORECAST_DAYS,
+        })
         if use_cache:
             self._cache = (time.monotonic(), data)
         return data
@@ -226,13 +235,18 @@ class AirSkill(Skill):
         self._last_check = now
 
         try:
-            current = self._fetch(
+            payload = self._fetch(
                 self.config.latitude, self.config.longitude, use_cache=False
-            )["current"]
+            )
+            current = payload["current"]
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as e:
             log.debug("air check failed: %s", e)
             return None
-        self._cache = (now, {"current": current})
+        # The whole payload, not just the current block. Caching only `current`
+        # here meant every forecast question after a tick answered "I don't
+        # have a forecast" -- and tick runs at startup and every half hour, so
+        # that was nearly always the cache a question found.
+        self._cache = (now, payload)
 
         dust = _number(current.get("dust"))
         uv = _number(current.get("uv_index"))

@@ -51,7 +51,7 @@ def rig():
         error: Exception | None = None
         calls = 0
 
-        def _fetch(self, lat, lon, use_cache=True):
+        def _get(self, url, params):
             Rig.calls += 1
             if self.error is not None:
                 raise self.error
@@ -152,6 +152,31 @@ def test_rearms_after_dropping_below(rig):
     rig.payload = DUSTY
     rig._last_check = 0
     assert "dust" in (rig.tick() or "").lower()
+
+
+def test_a_tick_leaves_the_forecast_intact(rig):
+    """The bug this file missed the first time.
+
+    tick() rebuilt the cache from only the current block, so every forecast
+    question afterwards answered "I don't have a forecast" -- and tick runs at
+    startup and every half hour, so that was nearly always the cache a question
+    found. Today kept working, which is what made it look like a forecast
+    problem rather than a caching one.
+    """
+    rig.payload = FORECAST
+    rig.tick()
+    assert set(rig._cache[1]) >= {"current", "hourly", "daily"}, "cache truncated"
+    assert "307" in rig.run(kind="dust", when="tomorrow")
+    assert "ease off" in rig.run(when="trend")
+
+
+def test_a_tick_primes_the_cache_rather_than_costing_a_second_call(rig):
+    rig.payload = FORECAST
+    rig.tick()
+    before = type(rig).calls
+    rig.run()
+    rig.run(when="tomorrow")
+    assert type(rig).calls == before, "refetched what tick had already fetched"
 
 
 def test_respects_the_check_interval(rig):
