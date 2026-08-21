@@ -18,7 +18,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from faethon.skills.air_skill import SKILL, AirSkill, describe_air, describe_uv
+from faethon.skills.air_skill import (
+    SKILL, AirSkill, daily_peaks, day_name, describe_air, describe_uv)
 
 # The live reading on the afternoon this was built: a real dust event.
 DUSTY = {
@@ -29,6 +30,18 @@ CLEAN = {
     "current": {"pm10": 18.0, "pm2_5": 6.0, "dust": 4.0,
                 "uv_index": 2.1, "european_aqi": 15},
 }
+
+# The measured decay of the real event: 321, 307, 219, 132 over four days.
+DAYS = ["2026-08-21", "2026-08-22", "2026-08-23", "2026-08-24"]
+FORECAST = dict(
+    DUSTY,
+    daily={"time": DAYS, "uv_index_max": [9.1, 9.25, 8.55, 9.05]},
+    hourly={
+        "time": [f"{d}T{h:02d}:00" for d in DAYS for h in (0, 12)],
+        "dust": [160, 321, 150, 307, 110, 219, 60, 132],
+        "european_aqi": [70, 95, 72, 99, 60, 94, 45, 80],
+    },
+)
 
 
 @pytest.fixture
@@ -203,3 +216,97 @@ def test_the_daily_phrasings_skip_the_model(phrase):
 ])
 def test_does_not_fire_on_passing_mentions(phrase):
     assert SKILL.match(phrase) is None, phrase
+
+
+# -- the next few days ----------------------------------------------------
+
+def test_daily_peaks_takes_the_peak_not_the_mean():
+    """Whether it gets bad at all beats what it averaged overnight."""
+    peaks = daily_peaks(FORECAST["hourly"])
+    assert peaks["2026-08-21"]["dust"] == 321
+    assert peaks["2026-08-24"]["dust"] == 132
+
+
+def test_day_names_come_from_the_api_date_not_the_pi_clock():
+    """The Pi has no RTC; a weekday is what it would get wrong after a boot."""
+    assert day_name("2026-08-21", 0) == "today"
+    assert day_name("2026-08-22", 1) == "tomorrow"
+    assert day_name("2026-08-24", 3) == "Monday"
+    assert day_name("not-a-date", 2) == "in 2 days"
+
+
+def test_tomorrow_uses_the_forecast_not_the_current_reading(rig):
+    rig.payload = FORECAST
+    said = rig.run(kind="dust", when="tomorrow")
+    assert "307" in said and "tomorrow" in said
+    assert "310" not in said, "answered from the current reading"
+
+
+def test_tomorrow_air_and_uv(rig):
+    rig.payload = FORECAST
+    assert rig.run(when="tomorrow") == "The air should be very poor in Abu Dhabi tomorrow."
+    assert "9" in rig.run(kind="uv", when="tomorrow")
+
+
+def test_uv_tomorrow_uses_the_native_daily_max(rig):
+    """UV is the one field the API aggregates itself; do not re-derive it."""
+    rig.payload = dict(FORECAST, daily={"time": DAYS, "uv_index_max": [1, 11.4, 3, 3]})
+    assert "extreme" in rig.run(kind="uv", when="tomorrow")
+
+
+def test_trend_gives_a_direction_and_a_day(rig):
+    rig.payload = FORECAST
+    said = rig.run(when="trend")
+    assert "ease off" in said and "321" in said and "132" in said and "Monday" in said
+
+
+def test_trend_notices_it_getting_worse(rig):
+    rig.payload = dict(FORECAST, hourly=dict(
+        FORECAST["hourly"], dust=[50, 60, 80, 100, 150, 200, 260, 300]))
+    said = rig.run(when="trend")
+    assert "worse" in said
+
+
+def test_trend_says_so_when_nothing_changes(rig):
+    rig.payload = dict(FORECAST, hourly=dict(
+        FORECAST["hourly"], dust=[300, 310, 300, 305, 300, 308, 300, 302]))
+    assert "Not much change" in rig.run(when="trend")
+
+
+def test_trend_on_the_air_is_read_as_dust(rig):
+    """"Is the air going to clear" is a dust question in this climate."""
+    rig.payload = FORECAST
+    assert rig.run(trend="air") == rig.run(trend="dust")
+
+
+def test_missing_forecast_is_admitted_not_invented(rig):
+    """The stub payloads carry no hourly block; that must not become a number."""
+    rig.payload = DUSTY
+    assert "don't have a forecast" in rig.run(when="tomorrow")
+    assert "don't have enough forecast" in rig.run(when="trend")
+
+
+def test_a_flat_zero_baseline_does_not_divide_by_zero(rig):
+    rig.payload = dict(FORECAST, hourly=dict(
+        FORECAST["hourly"], dust=[0, 0, 0, 0, 0, 0, 0, 0]))
+    assert "Not much change" in rig.run(when="trend")
+
+
+@pytest.mark.parametrize("phrase,expected", [
+    ("is the dust going to clear", "trend"),
+    ("will the dust clear", "trend"),
+    ("is the air getting better", "trend"),
+    ("is the dust dying down", "trend"),
+    ("will it be dusty tomorrow", "tomorrow"),
+    ("what's the air like tomorrow", "tomorrow"),
+    ("what's the uv tomorrow", "tomorrow"),
+])
+def test_forecast_phrasings_skip_the_model(phrase, expected):
+    params = SKILL.match(phrase)
+    assert params is not None, phrase
+    assert expected in params, f"{phrase} -> {params}"
+
+
+def test_today_is_still_the_default(rig):
+    rig.payload = FORECAST
+    assert rig.run() == "The air is very poor in Abu Dhabi, mostly dust."
