@@ -15,9 +15,12 @@ No network here: the HTTP layer is stubbed.
 
 from __future__ import annotations
 
+import time
+
 import httpx
 import pytest
 
+from faethon import state
 from faethon.skills.air_skill import (
     SKILL, AirSkill, daily_peaks, day_name, describe_air, describe_uv)
 
@@ -30,6 +33,11 @@ CLEAN = {
     "current": {"pm10": 18.0, "pm2_5": 6.0, "dust": 4.0,
                 "uv_index": 2.1, "european_aqi": 15},
 }
+
+# Dust over the line, UV under it. tick() says at most one thing per check, so
+# with both over threshold a restart legitimately announces the UV it never got
+# to -- true, but it makes "did the dust repeat?" ambiguous to assert.
+DUSTY_ONLY = {"current": dict(DUSTY["current"], uv_index=5.0)}
 
 # The measured decay of the real event: 321, 307, 219, 132 over four days.
 DAYS = ["2026-08-21", "2026-08-22", "2026-08-23", "2026-08-24"]
@@ -45,7 +53,7 @@ FORECAST = dict(
 
 
 @pytest.fixture
-def rig():
+def rig(tmp_path, monkeypatch):
     class Rig(AirSkill):
         payload = DUSTY
         error: Exception | None = None
@@ -57,9 +65,13 @@ def rig():
                 raise self.error
             return self.payload
 
+    # Never the real /var/lib/faethon: these tests write warning flags.
+    monkeypatch.setattr(state, "state_dir", lambda: tmp_path)
+
     rig = Rig()
     rig._air_config = type("C", (), {
-        "dust_warn": 200.0, "uv_warn": 8.0, "check_every_minutes": 30.0})()
+        "dust_warn": 200.0, "uv_warn": 8.0, "check_every_minutes": 30.0,
+        "stale_after_hours": 6.0})()
     rig._config = type("C", (), {
         "latitude": 24.433, "longitude": 54.6511, "place_name": "Abu Dhabi"})()
     Rig.calls = 0
@@ -335,3 +347,147 @@ def test_forecast_phrasings_skip_the_model(phrase, expected):
 def test_today_is_still_the_default(rig):
     rig.payload = FORECAST
     assert rig.run() == "The air is very poor in Abu Dhabi, mostly dust."
+
+
+# -- surviving a restart ------------------------------------------------------
+# The warning is say-once, but the flag lived only in memory, so every restart
+# announced the same dust again. Faethon restarts on a voice command, which
+# made this easy to trigger and irritating in exactly the conditions it fires.
+
+
+def restarted(rig):
+    """A fresh instance, as a restart produces, sharing the same state dir."""
+    fresh = type(rig)()
+    fresh._air_config = rig._air_config
+    fresh._config = rig._config
+    return fresh
+
+
+def test_a_restart_does_not_repeat_the_warning(rig):
+    rig.payload = DUSTY_ONLY
+    assert "dust" in (rig.tick() or "").lower()
+
+    again = restarted(rig)
+    again.payload = DUSTY_ONLY
+    assert again.tick() is None, "repeated the warning after a restart"
+
+
+def test_a_long_gap_forgets_because_the_episode_may_have_ended(rig, monkeypatch):
+    """An episode ends when the reading drops, which Faethon only sees while
+    running. After a gap it cannot know that did not happen."""
+    from faethon import clock
+
+    monkeypatch.setattr(clock, "is_synced", lambda: True)
+    rig.tick()
+
+    seven_hours = time.time() + 7 * 3600
+    monkeypatch.setattr(time, "time", lambda: seven_hours)
+    again = restarted(rig)
+    assert "dust" in (again.tick() or "").lower(), "stayed silent across a long gap"
+
+
+def test_a_short_gap_stays_silent(rig, monkeypatch):
+    from faethon import clock
+
+    monkeypatch.setattr(clock, "is_synced", lambda: True)
+    rig.payload = DUSTY_ONLY
+    rig.tick()
+
+    soon = time.time() + 600
+    monkeypatch.setattr(time, "time", lambda: soon)
+    again = restarted(rig)
+    again.payload = DUSTY_ONLY
+    assert again.tick() is None
+
+
+def test_an_unsynced_clock_keeps_quiet_rather_than_repeating(rig, monkeypatch):
+    """The Pi has no RTC. Wrong in the silent direction beats wrong in the
+    direction the user just asked to be rid of."""
+    from faethon import clock
+
+    monkeypatch.setattr(clock, "is_synced", lambda: False)
+    rig.payload = DUSTY_ONLY
+    rig.tick()
+    much_later = time.time() + 30 * 3600
+    monkeypatch.setattr(time, "time", lambda: much_later)
+    again = restarted(rig)
+    again.payload = DUSTY_ONLY
+    assert again.tick() is None
+
+
+def test_clearing_persists_so_the_next_episode_is_announced(rig):
+    rig.tick()                                   # warned
+    rig.payload = CLEAN
+    rig._last_check = 0
+    assert rig.tick() is None                    # dropped back, flag cleared
+
+    again = restarted(rig)
+    again.payload = DUSTY
+    assert "dust" in (again.tick() or "").lower(), "new episode went unannounced"
+
+
+def test_the_stamp_refreshes_even_when_nothing_is_said(rig, monkeypatch):
+    """Otherwise a quiet week of good air would look like a week of not
+    looking, and the flags would expire for the wrong reason."""
+    from faethon import clock
+
+    monkeypatch.setattr(clock, "is_synced", lambda: True)
+    rig.tick()
+    saved = state.load("air_warnings", {})
+    first = saved["at"]
+
+    later = time.time() + 3600
+    monkeypatch.setattr(time, "time", lambda: later)
+    rig._last_check = 0
+    rig.tick()
+    assert state.load("air_warnings", {})["at"] > first
+
+
+def test_a_corrupt_state_file_does_not_stop_it(rig, tmp_path):
+    (tmp_path / "air_warnings.json").write_text("{ not json")
+    assert "dust" in (rig.tick() or "").lower()
+
+
+def test_a_stamp_from_the_future_is_not_trusted(rig, monkeypatch):
+    """A clock corrected backwards would otherwise look freshly observed
+    forever, silencing the warning permanently."""
+    from faethon import clock
+
+    monkeypatch.setattr(clock, "is_synced", lambda: True)
+    rig.tick()
+    backwards = time.time() - 48 * 3600
+    monkeypatch.setattr(time, "time", lambda: backwards)
+    assert "dust" in (restarted(rig).tick() or "").lower()
+
+
+def test_a_failed_check_does_not_refresh_the_stamp(rig, monkeypatch):
+    """A stamp is a claim to have seen a reading; a timeout saw nothing."""
+    from faethon import clock
+
+    monkeypatch.setattr(clock, "is_synced", lambda: True)
+    rig.tick()
+    before = state.load("air_warnings", {})["at"]
+
+    rig.error = httpx.ConnectError("no route")
+    monkeypatch.setattr(time, "time", lambda: before + 3600)
+    rig._last_check = 0
+    rig.tick()
+    assert state.load("air_warnings", {})["at"] == before
+
+
+def test_a_restart_delivers_the_other_warning_rather_than_repeating(rig):
+    """With dust and UV both over the line, a check says only one thing.
+
+    So a restart is not silent -- it announces the UV it never reached. That
+    is the point: the flag suppresses what was already said, not everything.
+    """
+    first = rig.tick()
+    assert "dust" in (first or "").lower()
+
+    again = restarted(rig)
+    second = again.tick()
+    assert second is not None and "UV" in second
+    assert "dust" not in second.lower()
+
+    third = restarted(again)
+    assert third.tick() is None, "nothing left to say, yet it said something"

@@ -120,6 +120,14 @@ class AirConfig(BaseModel):
     uv_warn: float = Field(8.0, ge=0.0)
     #: Both change over hours, so checking more often buys nothing.
     check_every_minutes: float = Field(30.0, gt=0.0)
+    #: How long a "already warned about this" flag survives a gap in
+    #: observation. The flag means "they have been told about the current
+    #: episode", and an episode ends when the reading drops back -- which
+    #: Faethon can only notice while it is running. After a gap this long it
+    #: cannot know the episode did not end and restart unseen, so it forgets
+    #: and is willing to warn again. Short restarts stay silent; a night with
+    #: the Pi switched off does not.
+    stale_after_hours: float = Field(6.0, gt=0.0)
 
 
 class TurnLogConfig(BaseModel):

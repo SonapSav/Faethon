@@ -38,6 +38,7 @@ from datetime import date as _date
 
 import httpx
 
+from .. import clock, state
 from ..config import load_config
 from .base import Skill
 
@@ -50,6 +51,8 @@ TIMEOUT_SEC = 10.0
 CACHE_SEC = 900.0
 #: Today plus three. See the module docstring on why not the seven on offer.
 FORECAST_DAYS = 4
+#: Which warnings have already been given, so a restart does not repeat them.
+STATE_NAME = "air_warnings"
 
 #: European AQI bands, in the words the index itself uses.
 _AQI_BANDS = [(20, "good"), (40, "fair"), (60, "moderate"),
@@ -177,6 +180,7 @@ class AirSkill(Skill):
         self._air_config = None
         self._last_check = 0.0
         self._warned: set[str] = set()
+        self._loaded = False
 
     @property
     def config(self):
@@ -219,6 +223,46 @@ class AirSkill(Skill):
             self._cache = (time.monotonic(), data)
         return data
 
+    # -- remembering what has already been said ---------------------------
+
+    def _restore(self) -> None:
+        """Load the warnings already given, once.
+
+        A flag means "they have been told about the current episode", and an
+        episode ends when the reading drops back below the threshold -- which
+        Faethon can only see while it is running. So the flags are kept across
+        a restart, but discarded after a long enough gap in observation that
+        the episode could have ended and a new one begun unseen. A reboot stays
+        silent; a night switched off does not.
+        """
+        if self._loaded:
+            return
+        self._loaded = True
+        data = state.load(STATE_NAME, {})
+        if not isinstance(data, dict):
+            return
+        warned = data.get("warned")
+        if not isinstance(warned, list):
+            return
+        seen_at = data.get("at")
+        if isinstance(seen_at, (int, float)) and clock.is_synced():
+            gap = time.time() - seen_at
+            if gap > self.air.stale_after_hours * 3600:
+                log.info("air warnings %.1fh stale; forgetting them", gap / 3600)
+                return
+            # A clock corrected backwards past the stamp would otherwise look
+            # like a fresh observation forever.
+            if gap < 0:
+                log.info("air warning stamp is in the future; forgetting")
+                return
+        self._warned = {str(w) for w in warned if isinstance(w, str)}
+        if self._warned:
+            log.info("already warned about: %s", ", ".join(sorted(self._warned)))
+
+    def _persist(self) -> None:
+        """Record the flags and when they were last confirmed by a reading."""
+        state.save(STATE_NAME, {"warned": sorted(self._warned), "at": time.time()})
+
     # -- speaking up unasked ----------------------------------------------
 
     def tick(self) -> str | None:
@@ -229,6 +273,7 @@ class AirSkill(Skill):
         the microphone, so detection is delayed rather than lost -- measured at
         0.56s of backlog, consumed at 1.28x real time.
         """
+        self._restore()
         now = time.monotonic()
         if now - self._last_check < self.air.check_every_minutes * 60:
             return None
@@ -251,28 +296,33 @@ class AirSkill(Skill):
         dust = _number(current.get("dust"))
         uv = _number(current.get("uv_index"))
 
+        said: str | None = None
         if dust is not None:
             if dust >= self.air.dust_warn and "dust" not in self._warned:
                 self._warned.add("dust")
                 log.info("dust %.0f over %.0f", dust, self.air.dust_warn)
-                return (
+                said = (
                     f"There's a lot of dust outside, {round(dust)} "
                     "micrograms. Worth keeping the windows shut."
                 )
-            if dust < self.air.dust_warn:
+            elif dust < self.air.dust_warn:
                 self._warned.discard("dust")
 
-        if uv is not None:
+        if said is None and uv is not None:
             if uv >= self.air.uv_warn and "uv" not in self._warned:
                 self._warned.add("uv")
                 log.info("uv %.1f over %.1f", uv, self.air.uv_warn)
-                return (
+                said = (
                     f"The UV index is {round(uv)}, which is "
                     f"{describe_uv(uv)}. Worth covering up outside."
                 )
-            if uv < self.air.uv_warn:
+            elif uv < self.air.uv_warn:
                 self._warned.discard("uv")
-        return None
+
+        # Every observation, not only the ones that spoke: the stamp is what
+        # says how long ago Faethon last actually looked.
+        self._persist()
+        return said
 
     # -- the asked-for half -----------------------------------------------
 
