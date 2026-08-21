@@ -366,11 +366,16 @@ class AirSkill(Skill):
             log.error("unexpected air response: %s", e)
             return "The air quality service gave me an answer I didn't understand."
 
-        if when == "today":
-            return self._describe(current, label, kind)
         if when == "trend":
             return self._describe_trend(payload, label, kind)
-        return self._describe_day(payload, label, kind, offset=1)
+        if when == "tomorrow":
+            return self._describe_day(payload, label, kind, offset=1)
+        # Anything else means now. The model does not confine itself to the
+        # enum -- asked in Greek it sent when="now", which used to fall past
+        # both branches into tomorrow's forecast and answer "the air should be
+        # very poor tomorrow" to a question about right now. An unrecognised
+        # value must never silently become a different day.
+        return self._describe(current, label, kind)
 
     def _describe(self, current: dict, place: str, kind: str) -> str:
         dust = _number(current.get("dust"))

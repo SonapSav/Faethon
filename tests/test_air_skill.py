@@ -491,3 +491,26 @@ def test_a_restart_delivers_the_other_warning_rather_than_repeating(rig):
 
     third = restarted(again)
     assert third.tick() is None, "nothing left to say, yet it said something"
+
+
+def test_an_unknown_when_answers_now_rather_than_tomorrow(rig):
+    """Found by asking in Greek: the model sent when="now", outside the enum.
+
+    The dispatch tested for "today" and "trend" and let everything else fall
+    into tomorrow, so a question about right now was answered with tomorrow's
+    forecast -- and worded "should be", which reads as a forecast without
+    admitting it answered a different question.
+    """
+    rig.payload = FORECAST
+    now = rig.run(when="now")
+    assert now == rig.run(), "when='now' did not answer about now"
+    assert "tomorrow" not in now
+
+    for odd in ("right now", "currently", "", "TODAY", "nonsense"):
+        assert "tomorrow" not in rig.run(when=odd), f"when={odd!r} drifted to tomorrow"
+
+
+def test_the_real_values_still_dispatch(rig):
+    rig.payload = FORECAST
+    assert "tomorrow" in rig.run(when="tomorrow")
+    assert "ease off" in rig.run(when="trend")
