@@ -238,10 +238,18 @@ models:
   # Faethon streams, and every one of these generates several times faster
   # than the speech plays, so generation is never the bottleneck.
   #
-  #   microsoft/mai-voice-2-flash  0.32s median / 0.65s worst, $15/M chars
+  # The chosen model's figures are measured through synthesize_stream, i.e.
+  # the path Faethon actually speaks through; the rest are bare HTTP from the
+  # same session. The two methods agree closely where both were run (0.32s
+  # against 0.35s median), so the ranking holds -- but the numbers below are
+  # not all from the same harness, and the first call after an idle gap runs
+  # slow on any of them (1.55s once, settling by the third call).
+  #
+  #   microsoft/mai-voice-2-flash  0.35s median / 0.88s worst, $15/M chars
   #                                byte-identical output across all six calls,
   #                                and the whole Azure neural voice catalogue
-  #   fish-audio/s1                0.43s / 0.53s -- tightest spread, but ONE voice
+  #   fish-audio/s1                0.43s / 0.53s -- still the tightest spread
+  #                                of anything measured, but ONE voice
   #   x-ai/grok-voice-tts-1.0      0.50s / 1.38s, five voices (Eve Ara Rex Sal Leo)
   #   fish-audio/s2.1-pro-free     0.50s / 0.86s, free, but no voice parameter
   #                                and no stated availability guarantee

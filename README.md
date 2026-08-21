@@ -979,6 +979,14 @@ the most consistent model measured, and switching back is two lines of config.
 It also returned byte-identical output across all six calls, which nothing else
 did. Deterministic synthesis means no speaker drift between renders.
 
+**Ignore the first call after an idle gap.** It runs slow on every model here —
+1.55s once on MAI, settling to 0.35s by the third call. Benchmark a model warm
+or you will reject a good one. The MAI figures above are measured through
+`synthesize_stream`, the path Faethon actually speaks through; the rest are
+bare HTTP from the same session. Where both were run they agreed closely, 0.32s
+against 0.35s median, so the ranking holds — but they are not all from the same
+harness.
+
 **Voice pace matters more than the numbers above.** The same announcement runs
 6.0s in `en-US-AndrewNeural` against 8.1s in `en-AU-NatashaNeural` — 35% off
 the wait on every reply, dwarfing the 0.1–0.2s differences in first-audio time.
