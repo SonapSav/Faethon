@@ -104,6 +104,24 @@ class WeatherConfig(BaseModel):
     units: Literal["metric", "imperial"] = "metric"
 
 
+class AirConfig(BaseModel):
+    """Air quality and UV, at the same coordinates as the weather.
+
+    Thresholds are for the unprompted warning, not for the spoken answer. Dust
+    is the variable that matters here and is invisible to a temperature
+    forecast: 45 degrees and "clear" was true while dust sat at 310.
+    """
+
+    #: Micrograms per cubic metre. WHO's PM10 guideline is 45, but Gulf
+    #: background routinely sits above 100, so a line drawn there would warn
+    #: most days and mean nothing.
+    dust_warn: float = Field(200.0, ge=0.0)
+    #: WHO's UV scale calls 8-10 "very high" and 11+ "extreme".
+    uv_warn: float = Field(8.0, ge=0.0)
+    #: Both change over hours, so checking more often buys nothing.
+    check_every_minutes: float = Field(30.0, gt=0.0)
+
+
 class TurnLogConfig(BaseModel):
     """A line per turn, so future thresholds can be measured.
 
@@ -226,6 +244,7 @@ class Config(BaseModel):
     credit: CreditConfig = CreditConfig()
     turn_log: TurnLogConfig = TurnLogConfig()
     weather: WeatherConfig = WeatherConfig()
+    air: AirConfig = AirConfig()
     models: ModelsConfig
     stt: STTConfig = STTConfig()
     llm: LLMConfig

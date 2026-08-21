@@ -145,6 +145,22 @@ weather:
   place_name: "Abu Dhabi"   # what Faethon calls it out loud
   units: "metric"         # or "imperial" for Fahrenheit
 
+air:
+  # Air quality and UV, at the same coordinates as the weather above.
+  #
+  # Dust is why this exists. It is the weather that changes your day here and
+  # is completely invisible to a temperature forecast -- measured on the
+  # afternoon this was built, the weather skill said "45 and clear in Abu
+  # Dhabi" while dust sat at 310 micrograms and the European index read very
+  # poor. Both sentences were true; only one was useful.
+  #
+  # These thresholds are for the unprompted warning only, not for the spoken
+  # answer. WHO's PM10 guideline is 45, but Gulf background routinely sits
+  # above 100, so a line drawn there would fire most days and mean nothing.
+  dust_warn: 200.0          # micrograms per cubic metre
+  uv_warn: 8.0              # WHO calls 8-10 "very high", 11+ "extreme"
+  check_every_minutes: 30   # both move over hours; checking faster buys nothing
+
 turn_log:
   # One line per turn in /var/lib/faethon/turns.jsonl, so the next threshold
   # can be measured rather than guessed.
