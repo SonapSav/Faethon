@@ -39,12 +39,25 @@ class CreditSkill(Skill):
         "much they have left to spend."
     )
 
+    #: Every one of these must be caught here rather than left to the model.
+    #: Asked "what is my budget with OpenRouter", which no pattern below used
+    #: to match, the model answered "You have 19 dollars and 34 cents left"
+    #: without calling anything -- against a real balance of $1.35. It said the
+    #: same figure twice more when asked again. A wrong balance is worse than
+    #: no answer in one specific direction: it overstated by 14x, so it reads
+    #: as reassurance at exactly the moment the account is nearly empty.
+    _WORDS = r"credit|credits|balance|funds|budget|money"
+
     patterns = [
-        rf"\b{_OPENROUTER}\b.{{0,30}}\b(?:credit|credits|balance|funds)\b",
-        rf"\b(?:credit|credits|balance|funds)\b.{{0,30}}\b{_OPENROUTER}\b",
+        rf"\b{_OPENROUTER}\b.{{0,30}}\b(?:{_WORDS})\b",
+        rf"\b(?:{_WORDS})\b.{{0,30}}\b{_OPENROUTER}\b",
+        rf"\bwhat(?:'s|s| is)? my (?:openrouter |api )?(?:{_WORDS})\b",
         r"\bwhat(?:'s|s| is)? my (?:credit |account )?balance\b",
-        r"\bhow much (?:credit|money) (?:do i have|is (?:there )?left|have i got)\b",
+        rf"\bhow much (?:{_WORDS}) (?:do i have|is (?:there )?left|have i got"
+        r"|is remaining)\b",
         r"\bhow much (?:do i have|have i got) left\b",
+        rf"\bhow much is (?:left|remaining)\b.{{0,20}}\b{_OPENROUTER}\b",
+        rf"\bhow much .{{0,20}}\b{_OPENROUTER}\b",
     ]
 
     def __init__(self) -> None:

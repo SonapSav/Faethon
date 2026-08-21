@@ -148,3 +148,51 @@ def test_phrasings_that_reach_it(heard):
 ])
 def test_phrasings_that_should_not(heard):
     assert SKILL.match(heard) is None, f"unexpectedly matched {heard!r}"
+
+
+# -- phrasings that must never reach the model --------------------------------
+# Asked "what is my budget with OpenRouter", which no pattern matched, the model
+# answered "You have 19 dollars and 34 cents left" without calling anything --
+# against a real balance of $1.35 -- and repeated it twice when asked again.
+# The direction is what makes it serious: overstating by 14x reads as
+# reassurance at exactly the moment the account is nearly empty.
+
+
+@pytest.mark.parametrize("phrase", [
+    "what is my budget with openrouter",
+    "what's my budget with open router",
+    "what is my budget",
+    "what is my openrouter budget",
+    "how much is left on openrouter",
+    "how much is remaining on open router",
+    "how much have i got left with openrouter",
+    "what is my openrouter balance",
+    "what is my credit balance",
+    "how much credit do i have",
+    "how much money do i have left",
+    "what is my balance",
+])
+def test_money_questions_never_reach_the_model(phrase):
+    assert SKILL.match(phrase) is not None, phrase
+
+
+@pytest.mark.parametrize("phrase", [
+    "how much money is a raspberry pi",
+    "what is the budget of the film",
+    "money can not buy happiness",
+    "how much does a pizza cost",
+    "how much time is left on the timer",
+    "tell me about budgeting",
+])
+def test_broad_money_words_do_not_overreach(phrase):
+    """"budget" and "money" are common English; they must still be quiet."""
+    assert SKILL.match(phrase) is None, phrase
+
+
+def test_the_prompt_forbids_inventing_live_figures():
+    """The regex covers the phrasings we thought of. This covers the rest."""
+    from faethon.config import load_config
+
+    prompt = load_config().llm.system_prompt.lower()
+    assert "cannot know any live figure" in prompt
+    assert "never state one from memory" in prompt
