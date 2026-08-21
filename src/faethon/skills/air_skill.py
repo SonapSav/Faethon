@@ -39,6 +39,7 @@ from datetime import date as _date
 import httpx
 
 from .. import clock, state
+from .. import disclosure
 from ..config import load_config
 from .base import Skill
 
@@ -198,6 +199,13 @@ class AirSkill(Skill):
     # -- the network ------------------------------------------------------
 
     def _get(self, url: str, params: dict) -> dict:
+        # Not the client's path, so it records itself. What leaves here is not
+        # a voice or a sentence, it is where this house is -- four decimal
+        # places, about ten metres. A different disclosure to a different
+        # company, and worth counting as such rather than as "a web request".
+        disclosure.LEDGER.record(
+            httpx.URL(url).host, httpx.URL(url).path, disclosure.LOCATION)
+
         """The one seam tests stub, so the caching above it stays under test.
 
         Stubbing _fetch instead hid a real bug: tick() was rebuilding the cache

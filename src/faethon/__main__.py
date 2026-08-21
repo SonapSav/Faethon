@@ -25,6 +25,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import disclosure
 from .audio import capture, playback
 from .audio.vad import Status, UtteranceRecorder
 from .bargein import BargeInListener
@@ -141,6 +142,10 @@ class Faethon:
             log.info("utterance hit the %dms cap", self.config.utterance.max_ms)
         if not result.usable:
             log.info("nothing to transcribe (%s)", result.status.name)
+            # The microphone was open and nothing left the house. Recorded
+            # because it leaves no other trace: a ledger that only counts
+            # requests can never show what it declined to send.
+            disclosure.LEDGER.withheld(result.status.name.lower())
             return None
         return result.pcm
 
@@ -258,7 +263,12 @@ class Faethon:
             interrupted=bool(spoken.interrupted),
         )
 
-        if self.credit.check():
+        disclosure.LEDGER.asked = False
+        try:
+            low = self.credit.check()
+        finally:
+            disclosure.LEDGER.asked = True
+        if low:
             self.announcer.say(LOW_CREDIT)
 
         # An interruption is a reason to keep listening even if nothing was
@@ -404,6 +414,16 @@ class Faethon:
         own. Anything raised here is logged and swallowed: a broken skill must
         not take down the loop that is listening for the wake word.
         """
+        # Anything a tick sends went out with nobody asking for it -- the dust
+        # check every half hour, whether or not a person is home. That is the
+        # category people never anticipate, so the ledger keeps it apart.
+        disclosure.LEDGER.asked = False
+        try:
+            self._tick_each(stream)
+        finally:
+            disclosure.LEDGER.asked = True
+
+    def _tick_each(self, stream) -> None:
         for skill in self.registry:
             # Checked *before* ticking, deliberately. A skill that is never
             # ticked keeps its say-once state, so a held announcement is

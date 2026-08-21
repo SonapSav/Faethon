@@ -14,6 +14,8 @@ from typing import Any
 
 import httpx
 
+from .. import disclosure
+
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://openrouter.ai/api/v1"
@@ -92,6 +94,7 @@ class OpenRouterClient:
         last_error: str = ""
         for attempt in range(MAX_ATTEMPTS):
             try:
+                self._disclose(path)
                 r = self._client.request(method, path, json=payload)
             except httpx.RequestError as e:
                 last_error = f"{type(e).__name__}: {e}"
@@ -125,6 +128,7 @@ class OpenRouterClient:
         last_error = ""
         for attempt in range(MAX_ATTEMPTS):
             try:
+                self._disclose(path)
                 with self._client.stream("POST", path, json=payload) as r:
                     if r.status_code in RETRY_STATUS and attempt < MAX_ATTEMPTS - 1:
                         r.read()
@@ -154,6 +158,16 @@ class OpenRouterClient:
                 time.sleep(self._sleep_for(attempt, None))
 
         raise OpenRouterError(f"{path} failed after {MAX_ATTEMPTS} attempts: {last_error}")
+
+    def _disclose(self, path: str) -> None:
+        """Note the request in the ledger, before it is made.
+
+        Before rather than after, and per attempt rather than per success: a
+        retried upload crossed the wire twice, and a request that times out
+        still sent everything it was carrying. A ledger of what arrived safely
+        would understate what left.
+        """
+        disclosure.LEDGER.record("openrouter.ai", path, disclosure.kind_for(path))
 
     def record_usage(self, usage: dict[str, Any] | None) -> None:
         """Add a response's cost to the running total.
