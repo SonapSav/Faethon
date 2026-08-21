@@ -282,7 +282,7 @@ def test_the_greeting_can_be_turned_off(rig, monkeypatch):
 
 
 def test_a_missing_greeting_file_is_survivable(rig, monkeypatch):
-    """A fresh clone before make_greeting.py has been run."""
+    """A fresh clone before make_speech.py has been run."""
     from faethon import __main__ as main_mod
 
     played = []

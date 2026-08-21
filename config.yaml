@@ -123,7 +123,7 @@ conversation:
   # other side of the room. The sentence is pre-rendered to assets/greeting.wav
   # rather than synthesised each boot, so it still plays when OpenRouter is
   # down, out of credit, or the wifi is not up yet -- which is when knowing the
-  # service came back matters most. Reword it in scripts/make_greeting.py and
+  # service came back matters most. Reword it in scripts/make_speech.py and
   # re-run that to regenerate.
   #
   # Played before the microphone is opened. The current wording scores 0.0001
@@ -160,7 +160,7 @@ turn_log:
   # journald already keeps the words, and whether it should is a live decision;
   # recording them again here would answer it by accident.
   #
-  # Read it with: uv run python scripts/turns.py [--days N]
+  # Read it with: uv run faethon-turns [--days N]
   enabled: true
 
   # Rotates one generation back at this size. Roughly 200 bytes a turn, so

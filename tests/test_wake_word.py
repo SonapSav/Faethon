@@ -198,7 +198,7 @@ def test_the_greeting_stays_under_the_wake_threshold(detector, config):
     which would otherwise only show up as Faethon waking itself on every start.
     """
     if not GREETING.exists():
-        pytest.skip("greeting not rendered; run scripts/make_greeting.py")
+        pytest.skip("greeting not rendered; run scripts/make_speech.py")
 
     with wave.open(str(GREETING)) as w:
         raw = w.readframes(w.getnframes())

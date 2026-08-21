@@ -421,7 +421,7 @@ It's pre-rendered to `assets/greeting.wav` rather than synthesised on each
 boot. A fixed sentence needs no network round-trip, and this way it still
 plays when OpenRouter is unreachable or out of credit — which is exactly when
 knowing the service came back is worth most. Reword it in
-`scripts/make_greeting.py` and re-run that; `greet_on_start: false` turns it
+`scripts/make_speech.py` and re-run that; `greet_on_start: false` turns it
 off.
 
 **Keep the assistant's name out of the greeting.** The current wording scores
@@ -923,9 +923,11 @@ while still correcting itself when genuinely wrong (7 × 8).
 - **Half-duplex except for the wake word.** Faethon can't understand you while
   it's talking — only spot its own wake phrase, which is what barge-in uses.
   Anything else you say during a reply is lost.
-- **A follow-up window has no cap on how long a conversation can run.** Anything
-  that keeps producing speech Whisper will transcribe — a television in the same
-  room — can hold one open indefinitely, and every turn is a paid API call.
+- **A conversation is capped at 20 turns or 5 minutes** without a fresh wake
+  word, after which the falling chime plays and it returns to wake-word
+  detection. Deliberately loose: it bounds a runaway — a television in the same
+  room re-opening the follow-up window on every turn — rather than trimming
+  ordinary use, whose longest recorded conversation was five follow-ups.
 - **Memory is 10 turns and RAM-only.** It forgets on restart, after 10 minutes
   of silence, or when you say **"clear the buffer"**.
 - **One wake word at a time.**

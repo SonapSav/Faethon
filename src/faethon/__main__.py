@@ -56,7 +56,7 @@ CLOSE_SOUND = ASSETS_DIR / "done.wav"   # "we're finished; wake me again"
 # Pre-rendered rather than synthesised on each boot: a fixed sentence needs no
 # network round-trip, and this way it still plays when OpenRouter is down, out
 # of credit, or the wifi is not up -- when knowing the service came back is
-# worth most. Regenerate with scripts/make_greeting.py.
+# worth most. Regenerate with scripts/make_speech.py.
 GREETING_SOUND = ASSETS_DIR / "greeting.wav"
 TIMER_SOUND = ASSETS_DIR / "timer.wav"   # "look up", not "go ahead"
 
@@ -442,7 +442,7 @@ class Faethon:
             return
         if not GREETING_SOUND.exists():
             log.warning(
-                "no greeting at %s -- run scripts/make_greeting.py", GREETING_SOUND
+                "no greeting at %s -- run scripts/make_speech.py", GREETING_SOUND
             )
             return
         playback.play_wav(GREETING_SOUND, self.config.audio.output_device)
