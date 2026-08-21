@@ -94,6 +94,13 @@ class WeatherSkill(Skill):
         r"(?:\s+(?P<when>today|tomorrow|tonight))?",
         rf"\bhow (?:hot|cold|warm) is it{_WHEN}{_END}",
         rf"\bwhat(?:'s|s| is) (?:the )?(?:temperature|forecast){_WHEN}{_END}",
+        # Asked "what is the forecasted temperature for tomorrow", the model
+        # answered with a high and a low without calling anything.
+        rf"\bwhat(?:'s|s| is) (?:the )?(?:forecast(?:ed)? )?"
+        rf"(?:high|low|temperature)(?: for)?{_WHEN}{_END}",
+        rf"\bhow (?:hot|cold|warm) (?:will it be|is it going to be){_WHEN}{_END}",
+        rf"\bis it (?:hot|cold|warm|mild|nice|pleasant) (?:out|outside){_WHEN}{_END}",
+        rf"\bwhat(?:'s|s| is) it like (?:out|outside){_WHEN}{_END}",
     ]
 
     parameters = {

@@ -147,6 +147,11 @@ class HealthSkill(Skill):
         r"\bwhat (?P<net>network|wifi|wi-fi) (?:are you|am i|is it) on\b",
         r"\bare you on (?P<net>wifi|wi-fi|ethernet)\b",
         r"\bwhat(?:'s|s| is) (?:the )?(?P<net>ssid|wifi name)\b",
+        # Asked "are you connected to a wifi network", the model answered with
+        # a specific SSID without calling anything.
+        r"\bare you (?P<net>connected|online)\b",
+        r"\bis the (?P<net>wifi|wi-fi|network|internet) (?:working|up|on|ok|okay|down)\b",
+        r"\bhow(?:'s|s| is) your (?P<temp>cpu|processor)\b",
     ]
 
     parameters = {

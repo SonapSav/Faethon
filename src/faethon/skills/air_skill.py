@@ -141,7 +141,8 @@ class AirSkill(Skill):
 
         rf"\bwhat(?:'s|s| is) the air(?: quality)?{_WHERE}{_END}",
         rf"\bhow(?:'s|s| is) the air{_WHERE}{_END}",
-        rf"\bis the air (?:ok|okay|bad|clean|safe){_WHERE}{_END}",
+        rf"\bis the air (?:ok|okay|bad|clean|safe)(?: to breathe)?{_WHERE}{_END}",
+        rf"\bhow bad is the (?:air|pollution|smog|dust|haze){_WHERE}{_END}",
         rf"\b(?:is|will) it (?:be )?(?P<dust>dusty|hazy){_WHERE}{_END}",
         rf"\bhow much (?P<dust>dust)(?: is there| will there be)?{_WHERE}{_END}",
         rf"\bwhat(?:'s|s| is) the (?P<uv>u\.?v\.?)(?: index)?{_WHERE}{_END}",

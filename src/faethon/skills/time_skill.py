@@ -46,6 +46,7 @@ class TimeSkill(Skill):
         # prompt grounding but costs a call for a fact already on the machine.
         rf"\bwhat(?:'s|s| is) (?:the |this )?(?:current )?(?P<kind>year){_END}",
         rf"\bwhat (?P<kind>year) is it{_END}",
+        r"\bhow late is it\b(?P<kind>)",
     ]
 
     parameters = {

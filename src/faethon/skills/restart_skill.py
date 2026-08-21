@@ -46,6 +46,15 @@ class RestartSkill(Skill):
         r"\brestart (?:fa?e|pha?e)thon\b",
         r"\brestart rh?as+py\b",
         r"\breboot yourself\b",
+        r"\breset yourself\b",
+        r"\breboot (?:the )?(?:assistant|service)\b",
+        # Bare "restart" stays out on purpose, and a test pins it. Everything
+        # else here was widened because a model that claims an action without
+        # performing it is worse than a refusal -- but restarting inverts that.
+        # An unwanted restart drops a conversation and costs ~20s of boot; a
+        # model merely saying "restarting now" and not doing it is confusing
+        # and harmless. So this is the one skill where the false positive is
+        # the more expensive mistake, and it stays narrow.
     ]
 
     def run(self, **params: object) -> str:

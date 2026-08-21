@@ -136,6 +136,7 @@ class VolumeSkill(Skill):
 
     patterns = [
         r"\b(?:turn (?:the )?)?volume (?P<action>up|down)\b",
+        r"\bturn (?P<action>up|down) the (?:volume|sound)\b",
         r"\bturn (?:it|the (?:volume|sound|music)) (?P<action>up|down)\b",
         # The unit group is what stops "set the volume to 30%" becoming
         # level 30. Whisper transcribes the sign literally, and Faethon
@@ -146,7 +147,19 @@ class VolumeSkill(Skill):
         r"\b(?P<action>quieter|softer)\b",
         r"\b(?P<action>unmute)\b",
         r"\b(?P<action>mute)\b",
-        r"\bwhat(?:'s|s| is) the (?P<action>volume)\b",
+        r"\bwhat(?:'s|s| is) (?:the|your) (?P<action>volume)\b",
+        r"\bhow (?P<action>loud) are you\b",
+        # Proven necessary: asked "Maximum Volume", the model replied "Volume
+        # is set to 100%" without calling anything, and the volume did not
+        # move. A claimed action that did not happen is worse than a refusal.
+        r"\b(?:maximum|max|full|highest) volume\b(?P<action2>)",
+        r"\bvolume (?:to |at )?(?:maximum|max|full|highest)\b(?P<action2>)",
+        # "all the way" is required, not optional: without it a bare "turn up"
+        # would jump to maximum instead of stepping one level.
+        r"\bturn (?:the |it )?(?:volume |sound )?(?:all the way|right) up\b"
+        r"(?P<action2>)",
+        r"\b(?:minimum|min|lowest) volume\b(?P<action3>)",
+        r"\bvolume (?:to |at )?(?:minimum|min|lowest)\b(?P<action3>)",
     ]
 
     parameters = {
@@ -249,6 +262,13 @@ class VolumeSkill(Skill):
 
             raw_level = params.get("level")
             action = str(params.get("action") or "").lower()
+            # Empty-string groups: a regex cannot inject a constant, so the
+            # "maximum volume" family matches an empty capture whose presence
+            # is the signal.
+            if "action2" in params:
+                action = "max"
+            elif "action3" in params:
+                action = "min"
 
             if action == "volume" and raw_level is None:
                 return self._describe(current)
@@ -262,7 +282,9 @@ class VolumeSkill(Skill):
                 target = current + 1
             elif action in ("down", "quieter", "softer"):
                 target = current - 1
-            elif action == "mute":
+            elif action == "max":
+                target = MAX_LEVEL
+            elif action in ("min", "mute"):
                 target = MIN_LEVEL
             elif action == "unmute":
                 # Unmuting into silence would look like it failed.

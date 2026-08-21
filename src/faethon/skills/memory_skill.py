@@ -32,6 +32,13 @@ class ClearMemorySkill(Skill):
         r"\bclear (?:the |your |our )?memory\b",
         r"\bforget (?:the |our |this )?(?:conversation|everything)\b",
         r"\b(?:start a |begin a )?(?:new|fresh) conversation\b",
+        # Clearing is destructive, so it must not depend on the model choosing
+        # to call it -- a model that says "Memory is cleared" without calling
+        # anything leaves someone believing a conversation was forgotten when
+        # every word of it is still in the buffer.
+        r"\bforget what we (?:said|talked about|discussed|were saying)\b",
+        r"\b(?:wipe|erase|delete|reset|dump) (?:the |your |our )?memory\b",
+        r"\bforget (?:it |that |all of it )?(?:all|everything)\b",
     ]
 
     def run(self, **params: object) -> str:
