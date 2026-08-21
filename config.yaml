@@ -233,16 +233,24 @@ models:
   # Switch back to openai/whisper-large-v3 if you need the accuracy.
   stt: "openai/whisper-large-v3-turbo"
   llm: "deepseek/deepseek-v4-flash"
-  # Benchmarked 2026-08-17. What matters is synthesis staying ahead of
-  # playback: below real-time, the speaker runs dry and ALSA underruns between
-  # sentences, which costs far more than the gap itself.
-  #   fish-audio/s1            0.3s to first byte, 3.5x real-time, $1.05/1k
-  #                            chosen for the headroom; only one voice though
-  #   deepgram/aura-2          0.4s, 1.5-1.9x real-time, $2.10/1k, 41 voices
-  #   deepgram/flux-tts:free   0.4s, 1.5x real-time, free, 36 voices
-  #   sesame/csm-1b            5.7s -- slower than speech, would underrun
-  #   hexgrad/kokoro-82m       cheapest by far, but was hanging mid-response
-  tts: "fish-audio/s1"
+  # Re-benchmarked 2026-08-21 on a real announcement, six calls each. What
+  # matters for the wait is time to FIRST audio, not total synthesis time:
+  # Faethon streams, and every one of these generates several times faster
+  # than the speech plays, so generation is never the bottleneck.
+  #
+  #   microsoft/mai-voice-2-flash  0.32s median / 0.65s worst, $15/M chars
+  #                                byte-identical output across all six calls,
+  #                                and the whole Azure neural voice catalogue
+  #   fish-audio/s1                0.43s / 0.53s -- tightest spread, but ONE voice
+  #   x-ai/grok-voice-tts-1.0      0.50s / 1.38s, five voices (Eve Ara Rex Sal Leo)
+  #   fish-audio/s2.1-pro-free     0.50s / 0.86s, free, but no voice parameter
+  #                                and no stated availability guarantee
+  #   deepgram/flux-tts:free       0.51s / 1.62s, free, 36 voices, worst tail
+  #   qwen/qwen-audio-3.0-tts-*    unusable: demands an explicit voice, refuses
+  #                                to enumerate them, 12 DashScope names failed
+  #   sesame/csm-1b                5.7s -- slower than speech, would underrun
+  #   hexgrad/kokoro-82m           cheapest by far, but hangs at peak hours
+  tts: "microsoft/mai-voice-2-flash"
 
 stt:
   # Pin the language. Whisper otherwise detects it per request from the audio
@@ -350,19 +358,25 @@ llm:
     in one sentence. Never apologise for a correct answer.
 
 tts:
-  # MUST be set, even though Fish Audio S1 offers only this one value.
-  # Omitting it does NOT fall back to a fixed default -- Fish picks a different
-  # speaker per request. Measured over 5 calls of the same sentence: pitch
-  # ranged 99-156 Hz with no voice set, versus 101-116 Hz with "alloy", i.e. a
-  # different person each time you ask Faethon anything.
+  # MUST be set. Several providers, including this one, reject a request with
+  # no voice outright ("An explicit voice is required"), and those that accept
+  # one pick a different speaker per request -- measured on Fish S1, where
+  # pitch ranged 99-156 Hz with no voice set against 101-116 Hz with one, i.e.
+  # a different person every time you asked Faethon anything.
   #
-  # If you switch to a provider with a real voice library, set one here and
-  # audition with ./scripts/try-voices.sh. For deepgram/aura-2:
-  #   female: aura-2-athena-en, thalia, asteria, luna
-  #   male:   aura-2-orion-en, apollo, arcas
-  #   avoid aura-2-zeus-en -- it truncated its sample in testing
-  # To list any provider's voices, send a bogus one; the 400 enumerates them.
-  voice: "alloy"
+  # MAI-Voice-2-Flash uses Azure neural voice names, so the catalogue is
+  # hundreds deep across 15 languages. Confirmed working: en-US-AndrewNeural,
+  # en-US-AvaNeural, en-US-EmmaNeural, en-US-BrianNeural, en-GB-SoniaNeural,
+  # en-GB-RyanNeural, en-AU-NatashaNeural.
+  #
+  # Andrew for the pace as much as the timbre: the same announcement runs 6.0s
+  # in his voice against 8.1s in en-AU-NatashaNeural. That is 35% off the wait
+  # on every single reply, and it costs nothing, since billing is per character
+  # rather than per second.
+  #
+  # To list any provider's voices, send a bogus one; the 400 sometimes
+  # enumerates them (Deepgram does, Fish and MAI do not).
+  voice: "en-US-AndrewNeural"
 
   # USD per 1000 characters of input text, used to estimate what speaking cost.
   # The speech endpoint returns raw audio with no usage body, /generation 404s
