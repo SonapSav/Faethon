@@ -249,6 +249,11 @@ class Faethon:
             cost=round(self.client.spent - spent_before, 6),
             chars=len(text),
             said_chars=len(spoken),
+            # The rate this row's speech was costed at. Recorded because the
+            # shipped constant was once wrong by 4.7x, and without it there is
+            # no way to tell a row priced wrongly from one priced before a
+            # genuine change.
+            tts_rate=self.config.tts.cost_per_1k_chars,
             held=len(self.memory),
             interrupted=bool(spoken.interrupted),
         )

@@ -123,3 +123,66 @@ def test_it_separates_wake_words_from_follow_ups(log):
     out = log.report()
     assert "1 started by a wake word" in out
     assert "2 follow-ups" in out
+
+
+# -- recosting rows written under a wrong rate --------------------------------
+# The shipped TTS constant was $0.0032 per 1k characters when the real figure
+# was $0.015. Rows written before that was measured understate every turn, and
+# left alone they drag the monthly projection down by the same factor -- which
+# is the number someone uses to decide how long their balance lasts.
+
+
+def test_early_rows_are_recosted_from_said_chars():
+    from faethon.turns import corrected_cost
+
+    # 1000 spoken characters charged at the old rate: $0.0032 of the total.
+    row = {"cost": 0.0042, "said_chars": 1000}       # 0.0032 speech + 0.001 rest
+    total, repaired = corrected_cost([row], 0.015)
+    assert repaired == 1
+    assert total == pytest.approx(0.001 + 0.015)     # rest + speech at the real rate
+
+
+def test_a_row_carrying_its_own_rate_is_left_alone():
+    """A genuine price change is history, not an error to be corrected."""
+    from faethon.turns import corrected_cost
+
+    row = {"cost": 0.0042, "said_chars": 1000, "tts_rate": 0.0032}
+    total, repaired = corrected_cost([row], 0.015)
+    assert repaired == 0
+    assert total == pytest.approx(0.0042)
+
+
+def test_rows_at_the_current_rate_are_untouched():
+    from faethon.turns import corrected_cost
+
+    row = {"cost": 0.016, "said_chars": 1000, "tts_rate": 0.015}
+    total, repaired = corrected_cost([row], 0.015)
+    assert repaired == 0 and total == pytest.approx(0.016)
+
+
+def test_a_row_with_no_speech_is_not_repaired():
+    from faethon.turns import corrected_cost
+
+    total, repaired = corrected_cost([{"cost": 0.0005}], 0.015)
+    assert repaired == 0 and total == pytest.approx(0.0005)
+
+
+def test_mixed_rows_add_up():
+    from faethon.turns import corrected_cost
+
+    rows = [
+        {"cost": 0.0042, "said_chars": 1000},                    # old, repaired
+        {"cost": 0.016, "said_chars": 1000, "tts_rate": 0.015},  # new, kept
+    ]
+    total, repaired = corrected_cost(rows, 0.015)
+    assert repaired == 1
+    assert total == pytest.approx(0.016 + 0.016)
+
+
+def test_new_turns_record_the_rate_they_were_costed_at():
+    """Without this field the next wrong constant is unfixable after the fact."""
+    import inspect
+    from faethon import __main__ as main_mod
+
+    src = inspect.getsource(main_mod.Faethon._handle_turn)
+    assert "tts_rate=" in src, "turn rows must record their TTS rate"

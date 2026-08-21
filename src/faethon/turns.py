@@ -16,12 +16,43 @@ import time
 from collections import Counter
 
 from . import state
+from .config import load_config
 from .turnlog import NAME
 
 
 #: Below this, a monthly projection says more about when you ran the script
 #: than about what Faethon costs.
 MIN_SPAN_TO_PROJECT = 6 * 3600
+
+
+#: What speech was priced at before it was measured properly. Rows written
+#: without a `tts_rate` field predate that measurement and used this.
+TTS_RATE_ASSUMED = 0.0032
+
+
+def corrected_cost(rows: list[dict], rate_now: float) -> tuple[float, int]:
+    """Total spend, with mis-priced early rows recosted.
+
+    A row records `said_chars` and, since the constant was fixed, the
+    `tts_rate` it was costed at. That is enough to undo a wrong rate exactly
+    rather than approximately: subtract what the row was charged for speech,
+    add what it should have been.
+
+    Only rows written under the wrong constant are touched. A row carrying its
+    own rate is left alone even if that rate differs from today's, because a
+    genuine price change is history rather than an error.
+    """
+    total = 0.0
+    repaired = 0
+    for row in rows:
+        cost = row.get("cost", 0.0)
+        rate = row.get("tts_rate")
+        if rate is None and "said_chars" in row:
+            said = row["said_chars"] / 1000
+            cost += said * rate_now - said * TTS_RATE_ASSUMED
+            repaired += 1
+        total += cost
+    return total, repaired
 
 
 def percentile(values: list[float], p: float) -> float:
@@ -67,7 +98,16 @@ def main() -> None:
             print(f"  {leg[:-2]:8} median {percentile(v, .5):6.2f}   "
                   f"p90 {percentile(v, .9):6.2f}   max {max(v):6.2f}")
 
-    total = sum(r.get("cost", 0.0) for r in rows)
+    rate_now = load_config().tts.cost_per_1k_chars
+    total, repaired = corrected_cost(rows, rate_now)
+    if repaired:
+        # Not a footnote: these rows were written with a TTS rate 4.7x under
+        # the real one, and left alone they drag the monthly projection down
+        # by roughly the same factor -- which is exactly the number someone
+        # decides how long their balance lasts from.
+        print(f"\n{repaired} early turn(s) priced speech at a rate later "
+              f"measured wrong; recosted from said_chars at "
+              f"${rate_now} per 1k.")
     line = (f"\ncost  ${total:.4f} over {span / 3600:.1f} hours"
             f"   (${total / max(len(rows), 1):.5f} a turn")
     # Only project from a window long enough to mean anything. Extrapolating a
