@@ -25,6 +25,7 @@ dependencies = [
 [project.scripts]
 faethon = "faethon.__main__:main"
 faethon-probe = "faethon.probe:main"
+faethon-turns = "faethon.turns:main"
 
 [dependency-groups]
 dev = [

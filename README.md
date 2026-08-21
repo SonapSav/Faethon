@@ -519,7 +519,7 @@ One line per turn in `/var/lib/faethon/turns.jsonl`, so the next threshold can
 be measured rather than guessed.
 
 ```bash
-uv run python scripts/turns.py --days 7
+uv run faethon-turns --days 7
 ```
 
 ```
@@ -549,6 +549,12 @@ recording them a second time here would answer it by accident.
 It rotates one generation back at `max_mb`, because an SD card is the part of a
 Pi that wears out. And it never raises: a log that can break a turn is worse
 than no log.
+
+State lives in `/var/lib/faethon`, and both the service and a foreground `uv
+run faethon` use it. systemd sets `STATE_DIRECTORY` when it starts the service;
+nothing sets it otherwise, so anything run by hand used to keep its own state
+inside the checkout — meaning a timer set in the foreground was invisible to
+the service, and reading the log meant setting the variable by hand.
 
 ## Timers
 

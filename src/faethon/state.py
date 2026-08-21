@@ -30,10 +30,30 @@ from .config import PROJECT_ROOT
 log = logging.getLogger(__name__)
 
 
+#: Matches StateDirectory= in the unit. systemd sets STATE_DIRECTORY when it
+#: starts the service; nothing sets it for a foreground run or a script.
+SERVICE_STATE = Path("/var/lib/faethon")
+
+
 def state_dir() -> Path:
-    """Where persistent state goes, creating it if needed."""
+    """Where persistent state goes, creating it if needed.
+
+    Outside systemd this prefers the service's own directory when it exists
+    and is usable. Without that, a foreground `uv run faethon` kept its timers
+    somewhere the service could not see, and reading the turn log meant
+    setting STATE_DIRECTORY by hand. One directory, whoever is running.
+
+    Falls back inside the checkout when the service directory is absent or
+    belongs to another user -- a fresh clone, or a machine where the service
+    runs as somebody else.
+    """
     env = os.environ.get("STATE_DIRECTORY")
-    path = Path(env.split(":")[0]) if env else PROJECT_ROOT / "state"
+    if env:
+        path = Path(env.split(":")[0])
+    elif SERVICE_STATE.is_dir() and os.access(SERVICE_STATE, os.R_OK):
+        path = SERVICE_STATE
+    else:
+        path = PROJECT_ROOT / "state"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

@@ -1,8 +1,8 @@
 """Summarise the turn log -- the point of keeping one.
 
-    uv run python scripts/turns.py [--days N]
+    uv run faethon-turns [--days N]
 
-Reads /var/lib/faethon/turns.jsonl (or the local state dir), and prints what
+Reads the turn log from wherever state lives, and prints what
 the thresholds in config.yaml would want to know: where turns actually go, how
 long each leg really takes including its tail, what it costs, and how long
 conversations run.
@@ -12,15 +12,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 from collections import Counter
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-from faethon import state          # noqa: E402
-from faethon.turnlog import NAME   # noqa: E402
+from . import state
+from .turnlog import NAME
 
 
 #: Below this, a monthly projection says more about when you ran the script
