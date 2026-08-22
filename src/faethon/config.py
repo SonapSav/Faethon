@@ -144,8 +144,6 @@ class RadioConfig(BaseModel):
     #: LAN round trips measured at 94ms. Short, because this runs inside a
     #: spoken turn and a dead host must not hold the conversation open.
     timeout_seconds: float = Field(4.0, gt=0.0)
-    #: Percentage points per "turn the radio up".
-    volume_step: int = Field(10, ge=1, le=50)
     #: The station list changes when someone edits it on the other Pi, which
     #: is rare. Long enough to stay off the network during a conversation.
     cache_seconds: float = Field(300.0, ge=0.0)

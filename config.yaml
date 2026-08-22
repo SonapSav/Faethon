@@ -158,7 +158,6 @@ radio:
   # languages intact: "94.9" in English, "94,9" in Greek.
   base_url: "http://radiohost.local:8000"
   timeout_seconds: 4.0     # LAN round trip measured at 94ms
-  volume_step: 10          # percentage points per "turn the radio up"
   cache_seconds: 300.0     # the station list changes rarely
 
   # Turn the radio down while Faethon is talking or being talked to, and put

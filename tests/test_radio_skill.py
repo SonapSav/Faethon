@@ -141,15 +141,45 @@ def test_previous_from_the_first_wraps_to_the_last(rig):
 
 
 def test_volume_is_clamped(rig):
-    assert rig.run(level=140) == "Radio volume is 100 percent."
-    assert "muted" in rig.run(level=-5)
+    assert rig.run(level=140) == "Radio volume is set to 100%."
+    assert rig.run(level=-5) == "Radio volume is set to 0%, muted."
 
 
-def test_volume_nudges_from_the_current_level(rig):
-    """Cumulative, not relative to a fixed starting point."""
-    assert rig.run(vol="up") == "Radio volume is 49 percent."
-    assert rig.run(vol="down") == "Radio volume is 39 percent."
-    assert rig.run(vol="down") == "Radio volume is 29 percent."
+def test_volume_is_a_level_not_a_percentage(rig):
+    """"Radio volume 5" means half, the same as it does for Faethon's own."""
+    assert rig.run(level=5) == "Radio volume is set to 50%."
+    assert type(rig).calls[-1] == ("POST", "/api/player/volume", {"level": 50})
+
+
+def test_a_percentage_said_back_is_still_understood(rig):
+    """Announcing "50%" teaches people to say "50" -- read as a level that
+    would clamp to maximum, which is how volume_skill got this wrong first."""
+    assert rig.run(level=50) == "Radio volume is set to 50%."
+    assert rig.run(level=50, unit="%") == "Radio volume is set to 50%."
+    assert rig.run(level=50, unit="percent") == "Radio volume is set to 50%."
+
+
+def test_volume_nudges_by_one_level(rig):
+    """From 39, which is level 4: up lands on 50, not 49."""
+    assert rig.run(vol="up") == "Radio volume is set to 50%."
+    assert rig.run(vol="down") == "Radio volume is set to 40%."
+
+
+def test_a_nudge_lands_on_a_level_boundary(rig):
+    """A radio left at 45 from somebody's phone should not stay between two
+    steps -- it goes to 60, not 55."""
+    rig.status_body = dict(PLAYING, volume=45)
+    assert rig.run(vol="up") == "Radio volume is set to 60%."
+
+
+def test_nudging_down_from_the_bottom_mutes_rather_than_wrapping(rig):
+    rig.status_body = dict(PLAYING, volume=0)
+    assert rig.run(vol="down") == "Radio volume is set to 0%, muted."
+
+
+def test_nudging_up_from_the_top_stays_at_the_top(rig):
+    rig.status_body = dict(PLAYING, volume=100)
+    assert rig.run(vol="up") == "Radio volume is set to 100%."
 
 
 def test_now_playing_includes_the_track(rig):

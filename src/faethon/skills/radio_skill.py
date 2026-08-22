@@ -50,7 +50,7 @@ import time
 
 import httpx
 
-from .. import disclosure, state
+from .. import disclosure, levels, state
 from ..config import load_config
 from .base import Skill
 
@@ -133,8 +133,13 @@ class RadioSkill(Skill):
         rf"\b(?P<step>next|previous|last)\s+(?:radio\s+)?station{_END}",
         r"\bturn\s+(?:the\s+)?radio\s+(?P<vol>up|down)\b",
         r"\bturn\s+(?P<vol>up|down)\s+the\s+radio\b",
-        r"\bradio\s+volume\s+(?:to\s+)?(?P<level>\d{1,3})\b",
-        r"\bset\s+(?:the\s+)?radio\s+volume\s+(?:to\s+)?(?P<level>\d{1,3})\b",
+        # The unit group is what stops "radio volume 50" becoming level 50
+        # clamped to maximum. This skill announces percentages, so people say
+        # percentages back -- the trap volume_skill hit, which is why both now
+        # share faethon.levels rather than each having their own scale.
+        r"\bradio\s+volume\s+(?:to\s+)?(?P<level>\d{1,3})\s*(?P<unit>%|percent)?",
+        r"\bset\s+(?:the\s+)?radio\s+volume\s+(?:to\s+)?(?P<level>\d{1,3})"
+        r"\s*(?P<unit>%|percent)?",
         rf"\bwhat(?:'s|s| is)\s+(?:playing|on the radio){_END}",
         rf"\bwhat\s+station\s+is\s+(?:this|it|on){_END}",
         # Listing is a different question from "what's playing", and the two
@@ -170,7 +175,12 @@ class RadioSkill(Skill):
             },
             "level": {
                 "type": "integer",
-                "description": "Radio volume, 0 to 100.",
+                "minimum": levels.MIN_LEVEL,
+                "maximum": levels.MAX_LEVEL,
+                "description": (
+                    "Radio volume as a level from 0 to 10, the same scale as "
+                    "Faethon's own volume. 5 is half."
+                ),
             },
         },
         "required": [],
@@ -279,7 +289,7 @@ class RadioSkill(Skill):
         if "vol" in params:
             return self._nudge(str(params["vol"]).lower())
         if "level" in params:
-            return self._set_volume(params["level"])
+            return self._set_volume(params["level"], str(params.get("unit") or ""))
         if "freq" in params:
             heard = str(params["freq"])
             freq = parse_frequency(heard)
@@ -302,7 +312,7 @@ class RadioSkill(Skill):
         if action == "status" or (not action and not params):
             return self._now_playing()
         if params.get("level") is not None:
-            return self._set_volume(params["level"])
+            return self._set_volume(params["level"], str(params.get("unit") or ""))
         if params.get("frequency") is not None:
             try:
                 return self._play_frequency(float(params["frequency"]))
@@ -380,22 +390,36 @@ class RadioSkill(Skill):
         return self._play(rows[i % len(rows)])
 
     def _nudge(self, direction: str) -> str:
+        """One level up or down, landing on a level boundary either way.
+
+        Reading the current percentage back as the nearest level is what makes
+        this predictable: a radio left at 45 on somebody's phone goes to 60
+        rather than 55, so after one nudge it sits on the scale Faethon speaks
+        in rather than between two of its steps.
+        """
         now = self.status()
         if now is None:
             return self.unavailable_reason
-        step = self.config.volume_step * (1 if direction == "up" else -1)
-        return self._set_volume(int(now.get("volume", 0)) + step)
+        level = levels.from_percent(int(now.get("volume", 0)))
+        return self._apply(level + (1 if direction == "up" else -1))
 
-    def _set_volume(self, level: object) -> str:
+    def _set_volume(self, number: object, unit: str = "") -> str:
         try:
-            wanted = max(0, min(100, int(level)))       # type: ignore[arg-type]
+            level = levels.as_level(int(number), unit)   # type: ignore[arg-type]
         except (TypeError, ValueError):
             return "I didn't catch what volume you wanted."
-        if self._call("POST", "/api/player/volume", json={"level": wanted}) is None:
+        return self._apply(level)
+
+    def _apply(self, level: int) -> str:
+        level = max(levels.MIN_LEVEL, min(levels.MAX_LEVEL, level))
+        if self._call("POST", "/api/player/volume",
+                      json={"level": levels.to_percent(level)}) is None:
             return self.unavailable_reason
-        if wanted == 0:
-            return "Radio volume is at zero, muted."
-        return f"Radio volume is {wanted} percent."
+        if level <= levels.MIN_LEVEL:
+            # 0% alone leaves it unclear whether the radio is off or merely
+            # turned right down -- the wording volume_skill settled on.
+            return f"Radio volume is set to {levels.percent(level)}, muted."
+        return f"Radio volume is set to {levels.percent(level)}."
 
     # -- getting out of the way -------------------------------------------
 

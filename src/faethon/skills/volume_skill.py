@@ -34,16 +34,19 @@ import logging
 import re
 import subprocess
 
+from .. import levels
 from .base import Skill
 
 log = logging.getLogger(__name__)
 
-MIN_LEVEL, MAX_LEVEL = 0, 10
+# The scale itself lives in faethon.levels, because the radio on the other Pi
+# uses the same one and a second copy would drift.
+MIN_LEVEL, MAX_LEVEL = levels.MIN_LEVEL, levels.MAX_LEVEL
 #: Spoken as a percentage: one level is one tenth of the dial, so 7 -> "70%".
 #: The literal "%" is deliberate -- Fish Audio S1 pronounces it, measured at
 #: 2.04s of audio against 2.09s for the word spelled out and 1.72s with the
 #: sign removed, so it is being said rather than skipped.
-PERCENT_PER_LEVEL = 10
+PERCENT_PER_LEVEL = levels.PERCENT_PER_LEVEL
 #: Levels 1..MAX_LEVEL span this many dB below the control's maximum.
 USABLE_RANGE_DB = 34.0
 
@@ -63,8 +66,7 @@ def _amixer(*args: str, card: str | None = None) -> str:
     return out.stdout
 
 
-def _percent(level: int) -> str:
-    return f"{level * PERCENT_PER_LEVEL}%"
+_percent = levels.percent
 
 
 def _spoken(level: int) -> str:
@@ -78,23 +80,7 @@ def _spoken(level: int) -> str:
     return f"Volume is set to {_percent(level)}."
 
 
-def _as_level(number: int, unit: str = "") -> int:
-    """Turn a spoken number into a level, whichever scale it was said in.
-
-    Faethon announces "Volume is set to 30%", so people say percentages back --
-    and "30" as a level would clamp to 10, i.e. every request landing on
-    maximum. A number is read as a percentage when it carries a unit, or when
-    it is simply too big to be a level: "70" can only mean 70%.
-
-    Any positive percentage gives at least level 1. Rounding 3% down to 0 would
-    mute the speaker when the user asked for something quiet, which is a
-    different thing and needs a different fix.
-    """
-    if unit or number > MAX_LEVEL:
-        if number <= 0:
-            return MIN_LEVEL
-        return max(1, min(MAX_LEVEL, round(number / PERCENT_PER_LEVEL)))
-    return max(MIN_LEVEL, min(MAX_LEVEL, number))
+_as_level = levels.as_level
 
 
 def _find_control() -> tuple[str, str] | None:
