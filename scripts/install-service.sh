@@ -36,6 +36,16 @@ echo "uv cache: $UV_CACHE"
 
 sudo -u "$OWNER" mkdir -p "$UV_CACHE"
 
+# Turn on the secret-blocking pre-commit hook. Git will not enable hooks from a
+# clone on its own -- deliberately, since that would let any repository run code
+# the moment you cloned it -- so a fresh checkout has no protection until
+# somebody sets this. Doing it here means anyone who installs the service gets
+# it, which is a better bet than anyone who reads the README.
+if [ -d "$PROJECT_DIR/.git" ]; then
+  sudo -u "$OWNER" git -C "$PROJECT_DIR" config core.hooksPath .githooks
+  echo "hooks   : .githooks (refuses to commit a key)"
+fi
+
 # The announce-on-failure unit: same rewriting, plus the audio device, which
 # it cannot read from config.yaml the way Faethon does.
 DEVICE="$(grep -oP '^\s*output_device:\s*"\K[^"]+' "$PROJECT_DIR/config.yaml" || echo default)"

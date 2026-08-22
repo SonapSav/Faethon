@@ -1,0 +1,58 @@
+#!/bin/sh
+# Refuse to commit a secret.
+#
+# Everything protecting the key today is a convention: .env is gitignored,
+# .env.example holds a placeholder, and pydantic's SecretStr masks the value in
+# reprs and tracebacks. All of that holds until somebody pastes a key into a
+# config file, a test fixture, or a commit message written in a hurry -- and on
+# a public repo that mistake is permanent, because rotating fixes the key while
+# the history keeps the string.
+#
+# So this is the one check that does not rely on remembering.
+#
+# Enable it (a fresh clone will not have it):
+#     git config core.hooksPath .githooks
+
+set -e
+
+fail() {
+    echo "pre-commit: refusing to commit -- $1" >&2
+    echo "  file: $2" >&2
+    echo >&2
+    echo "  If this is a false positive, commit with --no-verify, but look" >&2
+    echo "  twice first: on a public repo the history keeps it forever." >&2
+    exit 1
+}
+
+# .env itself, whatever it happens to contain today.
+if git diff --cached --name-only | grep -qx '.env'; then
+    fail "the .env file is staged" ".env"
+fi
+
+# Key-shaped strings in staged content. Checked per file so the message can
+# say where, and never printing the match itself.
+for file in $(git diff --cached --name-only --diff-filter=ACM); do
+    [ -f "$file" ] || continue
+    staged=$(git show ":$file" 2>/dev/null || true)
+
+    case "$staged" in
+        *sk-or-v1-*)
+            # The placeholder in .env.example is "sk-or-v1-..." -- dots, not
+            # a key. Only flag something with real key material after it.
+            if printf '%s' "$staged" | grep -qE 'sk-or-v1-[A-Za-z0-9]{20,}'; then
+                fail "an OpenRouter key" "$file"
+            fi
+            ;;
+    esac
+    if printf '%s' "$staged" | grep -qE '\bsk-[A-Za-z0-9]{32,}'; then
+        fail "an API key" "$file"
+    fi
+    if printf '%s' "$staged" | grep -qE '\bghp_[A-Za-z0-9]{36}\b'; then
+        fail "a GitHub token" "$file"
+    fi
+    if printf '%s' "$staged" | grep -qE '\bAKIA[0-9A-Z]{16}\b'; then
+        fail "an AWS access key" "$file"
+    fi
+done
+
+exit 0

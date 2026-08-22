@@ -1316,6 +1316,40 @@ while still correcting itself when genuinely wrong (7 × 8).
   of silence, or when you say **"clear the buffer"**.
 - **One wake word at a time.**
 
+## Secrets
+
+The OpenRouter key lives in `.env`, which is gitignored, mode 600, and has
+never been committed — checked across the whole history rather than assumed.
+`.env.example` holds a placeholder. Pydantic's `SecretStr` masks the value in
+reprs, f-strings and tracebacks, so a stray `print` or a crash cannot spill it,
+and errors from the API carry the path and status but never the headers.
+
+All of that is convention, though, and convention holds until somebody pastes a
+key into a config file or a test fixture in a hurry. On a public repo that
+mistake is permanent: rotating invalidates the key, but the history keeps the
+string.
+
+So there is a pre-commit hook that refuses. It blocks `.env` being staged at
+all, and any staged content carrying something key-shaped — OpenRouter, generic
+`sk-`, GitHub tokens, AWS keys. It never prints the match.
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`install-service.sh` runs that for you. It has to, because **git will not
+enable hooks from a clone on its own** — deliberately, since a repository that
+could run code the moment you cloned it would be a far worse problem. A fresh
+checkout is unprotected until somebody sets it, and that is a limit of git
+rather than something this repo can design around.
+
+If the hook ever fires on something innocent, `--no-verify` is there. Look
+twice first.
+
+**If a key does reach a commit**, rotating it is the fix, and it is the only
+fix — rewriting history does not help once a public repo has been cloned or
+indexed. Rotate first, tidy the history second, in that order.
+
 ## Tests
 
 ```bash
