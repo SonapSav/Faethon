@@ -27,6 +27,7 @@ faethon = "faethon.__main__:main"
 faethon-probe = "faethon.probe:main"
 faethon-turns = "faethon.turns:main"
 faethon-sent = "faethon.sent:main"
+faethon-misses = "faethon.misses:main"
 
 [dependency-groups]
 dev = [

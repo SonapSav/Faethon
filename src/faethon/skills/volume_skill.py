@@ -127,9 +127,9 @@ class VolumeSkill(Skill):
         # The unit group is what stops "set the volume to 30%" becoming
         # level 30. Whisper transcribes the sign literally, and Faethon
         # announces percentages, so people say them back.
-        rf"\bset (?:the )?volume (?:to|at) (?P<level>{levels.SPOKEN})"
+        rf"\bset\s+(?:the\s+)?volume\s+(?:to|at)?\s*(?P<level>{levels.SPOKEN})"
         rf"\s*(?P<unit>%|percent)?",
-        rf"\bvolume (?:to |at )?(?P<level>{levels.SPOKEN})\s*(?P<unit>%|percent)?",
+        rf"\bvolume\s+(?:to|at)?\s*(?P<level>{levels.SPOKEN})\s*(?P<unit>%|percent)?",
         r"\b(?P<action>louder)\b",
         r"\b(?P<action>quieter|softer)\b",
         r"\b(?P<action>unmute)\b",

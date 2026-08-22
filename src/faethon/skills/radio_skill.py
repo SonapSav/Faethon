@@ -121,7 +121,9 @@ class RadioSkill(Skill):
     # frequency, or "station". This skill sorts before set_volume and
     # set_timer in the registry, so a loose pattern here would silently steal
     # "turn it up" and "stop" from skills that already own them.
-    _END = r"(?:\s+(?:please|for me))*[^\w]*$"
+    # Punctuation before the courtesy word: Whisper wrote "Next radio
+    # station, please." and the comma alone made it miss.
+    _END = r"(?:[\s,]+(?:please|for me))*[^\w]*$"
 
     patterns = [
         r"\b(?:play|put on|switch to|tune (?:in )?to|go to)\s+"
