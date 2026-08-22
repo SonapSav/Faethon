@@ -59,6 +59,11 @@ _IN_NAME = re.compile(r"(\d{2,3})(?:[.,](\d))?")
 #: How long an unreachable host is remembered, so a dead Pi is not retried on
 #: every single turn while still recovering without a restart.
 UNAVAILABLE_FOR = 60.0
+#: How many frequencies to read out before summarising instead. Nineteen takes
+#: about half a minute to say, which is already at the edge of what anyone
+#: wants read back; a list twice that long stops being an answer and becomes a
+#: recital you cannot interrupt without the wake word.
+MAX_SPOKEN = 20
 
 
 def parse_frequency(text: str) -> float | None:
@@ -99,7 +104,8 @@ class RadioSkill(Skill):
     tag = "utility"
     description = (
         "Control the internet radio on the other Raspberry Pi: start it, stop "
-        "it, change station, change ITS volume, or say what is playing. "
+        "it, change station, change ITS volume, say what is playing, or list "
+        "which stations exist. "
         "Stations are chosen by FM frequency, e.g. 94.9. Give `station` only "
         "if the user named one rather than giving a frequency; the station "
         "list is on the device, so a name you do not recognise is still worth "
@@ -126,6 +132,18 @@ class RadioSkill(Skill):
         r"\bset\s+(?:the\s+)?radio\s+volume\s+(?:to\s+)?(?P<level>\d{1,3})\b",
         rf"\bwhat(?:'s|s| is)\s+(?:playing|on the radio){_END}",
         rf"\bwhat\s+station\s+is\s+(?:this|it|on){_END}",
+        # Listing is a different question from "what's playing", and the two
+        # phrasings are close enough that the distinction has to be explicit.
+        # The empty group is the marker: an empty match dict is
+        # indistinguishable from "what's playing", which is the next pattern
+        # along and answers a different question entirely.
+        rf"\bwhat\s+stations?\s+(?:do you have|have you got|are (?:there|available)"
+        rf"|can i (?:pick|choose|select|have))(?P<list>){_END}",
+        rf"\b(?:list|name|tell me)\s+(?:the\s+|your\s+|all (?:the|your)\s+)?"
+        rf"(?:radio\s+)?stations(?P<list>){_END}",
+        rf"\bwhich\s+stations?\s+(?:do you have|are (?:there|available)"
+        rf"|can i (?:pick|choose|select))(?P<list>){_END}",
+        rf"\bwhat(?:'s|s| is)\s+(?:on\s+)?(?:the\s+)?(?P<list>station list){_END}",
     ]
 
     parameters = {
@@ -141,7 +159,7 @@ class RadioSkill(Skill):
             },
             "action": {
                 "type": "string",
-                "enum": ["play", "stop", "next", "previous", "status",
+                "enum": ["play", "stop", "next", "previous", "status", "list",
                          "volume_up", "volume_down"],
                 "description": "Defaults to play when a station is given.",
             },
@@ -243,6 +261,8 @@ class RadioSkill(Skill):
         if not self.available:
             return self.unavailable_reason
 
+        if "list" in params or params.get("action") == "list":
+            return self._list_stations()
         if "stop" in params:
             return self._stop()
         if "resume" in params:
@@ -369,6 +389,34 @@ class RadioSkill(Skill):
         if wanted == 0:
             return "Radio volume is at zero, muted."
         return f"Radio volume is {wanted} percent."
+
+    def _list_stations(self) -> str:
+        """What is on the dial, fetched fresh every time.
+
+        Deliberately not cached: the list changes when someone edits it on the
+        other Pi, and the whole point of asking is to find out whether it did.
+        A cached answer to "what stations do you have" is the one answer that
+        is never worth giving.
+
+        Read as frequencies rather than names, for the same two reasons
+        selection is by frequency: half the names are Greek and an English
+        voice reading them produces noise, and the frequency is what you say
+        back to choose one.
+        """
+        rows = self.stations(fresh=True)
+        if not rows:
+            return self.unavailable_reason
+
+        freqs = sorted({f for f in (frequency_of(r.get("name", "")) for r in rows)
+                        if f is not None})
+        if not freqs:
+            return f"I have {len(rows)} stations, but none of them list a frequency."
+
+        spoken = [say_frequency(f) for f in freqs[:MAX_SPOKEN]]
+        said = f"I have {len(freqs)} stations: " + ", ".join(spoken)
+        if len(freqs) > MAX_SPOKEN:
+            said += f", and {len(freqs) - MAX_SPOKEN} more"
+        return said + "."
 
     def _now_playing(self) -> str:
         now = self.status()

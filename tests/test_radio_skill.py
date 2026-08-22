@@ -227,3 +227,76 @@ def test_an_unreachable_host_is_not_reported_as_a_missing_station(rig):
     for said in (rig.run(freq="94.9"), rig.run(station="Happy")):
         assert said == "I can't reach the radio right now."
         assert "don't have" not in said
+
+
+# -- listing what is on the dial ----------------------------------------------
+# Asked for explicitly so the list can be checked after adding or removing a
+# station on the other Pi. Which is exactly why it is never cached: a cached
+# answer to "what stations do you have" is the one answer never worth giving.
+
+
+def test_listing_is_fetched_fresh_every_time(rig):
+    rig.stations()                                   # warm the cache
+    before = len(type(rig).calls)
+    rig.run(list="")
+    rig.run(list="")
+    fetches = [c for c in type(rig).calls[before:] if c[1] == "/api/stations"]
+    assert len(fetches) == 2, "a cached station list defeats the point of asking"
+
+
+def test_listing_reads_frequencies_ascending(rig):
+    said = rig.run(list="")
+    assert said == "I have 6 stations: 88, 89.8, 92, 94.9, 96.3, 104."
+
+
+def test_listing_refreshes_the_cache_for_the_next_selection(rig):
+    """Add a station, ask what there is, then play it -- without a restart."""
+    rig.run(list="")
+    assert rig.by_frequency(94.9) is not None
+
+
+def test_a_long_list_summarises_rather_than_reciting(rig, monkeypatch):
+    """Nineteen frequencies already take 29.6s to say. Twice that stops being
+    an answer."""
+    from faethon.skills import radio_skill
+
+    many = [{"id": i, "name": f"Station {80 + i // 10},{i % 10}", "sort_order": i}
+            for i in range(60)]
+    monkeypatch.setattr(rig, "stations", lambda fresh=False: many)
+    said = rig.run(list="")
+    assert said.startswith("I have ")
+    assert "more." in said
+    assert said.count(",") <= radio_skill.MAX_SPOKEN + 2
+
+
+def test_listing_admits_an_unreachable_host(rig):
+    rig.down = True
+    assert rig.run(list="") == "I can't reach the radio right now."
+
+
+def test_stations_without_a_frequency_do_not_break_the_list(rig, monkeypatch):
+    monkeypatch.setattr(rig, "stations",
+                        lambda fresh=False: [{"id": 1, "name": "Some Station"}])
+    assert "none of them list a frequency" in rig.run(list="")
+
+
+@pytest.mark.parametrize("phrase", [
+    "what stations do you have",
+    "what stations are available",
+    "what stations have you got",
+    "which stations can i pick",
+    "list the stations",
+    "tell me the stations",
+    "list all the radio stations",
+    "what's the station list",
+])
+def test_listing_phrases_reach_the_list_not_now_playing(phrase):
+    params = SKILL.match(phrase)
+    assert params is not None, phrase
+    assert "list" in params, f"{phrase!r} would answer with what's playing"
+
+
+@pytest.mark.parametrize("phrase", ["what's playing", "what station is this"])
+def test_now_playing_is_still_a_different_question(phrase):
+    params = SKILL.match(phrase)
+    assert params is not None and "list" not in params
