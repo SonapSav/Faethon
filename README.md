@@ -893,6 +893,69 @@ windows — the microphone live, audio leaving, without a wake word. That is the
 5-second window working exactly as designed, and it is still the fact most
 worth surfacing.
 
+## Finding what it missed
+
+```bash
+faethon-misses --days 7
+```
+
+```
+196 turns over 3 days -- 104 matched a pattern, 92 did not
+
+(19 turn(s) that missed at the time would match today -- not listed)
+
+likely missed commands
+  used a skill's own vocabulary, but nothing matched
+    1x  'And what about your IP address?'   -> get_health?
+    1x  'Prestar the service.'              -> restart_assistant?
+
+rescued by the model
+  the model called a tool a pattern could have
+    1x  'Radio Volume.'
+```
+
+Every threshold in this project that turned out right was measured. The
+patterns were the last part still set by guessing at how somebody might phrase
+something — and the guessing fails *quietly*. A phrasing the regex misses does
+not error: it goes to the model, which answers well enough that nobody
+notices. "Radio volume at 7" fell through for a day and surfaced only because
+somebody said the radio was ignoring them.
+
+In the journal that looks like a `heard:` line with no `router ->` line after
+it, which is not something anyone spots by reading. So this reads them.
+
+**It stores nothing.** The transcripts are already in journald, and answering
+"which phrasing missed" by starting a second transcript store would settle
+[the deferred logging question](#the-turn-log) by accident. No sudo either —
+being in `adm` is enough.
+
+Four outcomes, and the interesting distinction is the second one:
+
+| outcome | meaning |
+|---|---|
+| **routed** | a pattern matched |
+| **rescued** | the model called a tool a pattern could have — right answer, one round trip slower and dearer |
+| **answered** | the model replied itself; mostly real conversation |
+| **nothing** | no skill and no reply |
+
+The `-> skill?` hint comes from each skill's **own patterns** rather than a
+hand-written list, so it cannot go stale when somebody adds a phrasing. That
+took two passes to be worth reading. Raw extraction turned `\b` into "bwhat"
+and split a group into "thon"; then ordinary English leaked through and made
+the hints actively wrong — "about", from *"forget what we talked about"*,
+pointed a joke about fatherhood at `clear_memory`. A wrong hint is worse than
+none, because it sends you to add a pattern to the wrong skill.
+
+**It also drops anything today's patterns would catch.** journald reaches
+further back than the last deploy, so six of the first nine findings had
+already been fixed hours earlier — and a list of solved problems is a list
+nobody reads twice. That filter took the report from 22 entries to 3.
+
+Two of those three were real: `volume at  8` had a **double space** where the
+pattern allowed exactly one, and `Next radio station, please.` had a **comma**
+before the courtesy word. Neither is something anyone would think to write a
+test for, which is the whole argument for the tool.
+
 ## Timers
 
 ```
