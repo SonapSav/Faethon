@@ -365,6 +365,10 @@ Nudging works in levels, so "turn the radio up" from 45 lands on 60 rather than
 55: after one nudge the radio sits on the scale Faethon speaks in instead of
 between two of its steps.
 
+Asked *during* a conversation, the change is deferred until the conversation
+closes — see [ducking](#ducking) for why. Faethon confirms the new level
+straight away; the radio arrives at it a moment later.
+
 ### Ducking
 
 The radio drops to 15% while Faethon holds the floor, and goes back afterwards.
@@ -387,15 +391,25 @@ answers it.
 Ducking exists for the **person in the room**, who has to hear the reply over
 the music. A different question, which the acoustic measurement never asked.
 
-Three things it has to get right:
+Four things it has to get right, each of which was a bug before it was a rule:
 
-- **A volume you set mid-conversation wins.** "Radio volume 5" during a turn is
-  a more recent instruction than whatever it was before, so nothing is put back.
+- **A volume command must not cancel the duck.** Asking for "radio volume 5"
+  mid-conversation used to move the radio immediately, so the confirmation
+  played over it at full volume — ducking defeated by the one command that is
+  actually about volume. The new level is now *deferred*: the radio stays down
+  through the reply and lands on it when the conversation closes.
+- **A nudge must step from your level, not the ducked one.** The live reading
+  during a turn is 15, not the 60 you left it at, so "turn the radio up" read
+  level 2 instead of level 6 and landed on 30. The setting was simply lost, and
+  nothing about it looks wrong until you notice the radio is quiet. Anything
+  that changes volume during a turn now goes through the duck.
 - **A duck that never landed is not "restored".** The state is written *before*
   the request, because a POST that times out may still have arrived — that is
   exactly how the radio ended up stuck at 15 with nothing recorded to undo it.
   Writing first makes the restore self-correcting: if the volume is not what we
-  think we set, the change never happened and the restore stands down.
+  think we set, the change never happened and the restore stands down. The same
+  comparison covers somebody changing it on their phone mid-conversation, which
+  is why one check does both jobs.
 - **It never blocks a turn.** The duck runs in a thread. Measured blocking at a
   worst case of **4094ms** before that — four seconds of silence ahead of the
   "go ahead" chime, with somebody standing there waiting to speak. It is 0.7ms
