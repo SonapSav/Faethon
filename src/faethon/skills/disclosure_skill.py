@@ -22,12 +22,6 @@ from .base import Skill
 DAY = 86400.0
 
 
-def _plural(n: int, word: str) -> str:
-    """Spoken, so "1 requests" is not acceptable. Only regular plurals -- an
-    irregular one is written out where it is used rather than guessed here."""
-    return f"{n} {word}" if n == 1 else f"{n} {word}s"
-
-
 def _minutes(seconds: float) -> str:
     """Spoken duration. Nobody wants "one hundred and forty eight seconds"."""
     if seconds < 90:
@@ -74,7 +68,7 @@ class DisclosureSkill(Skill):
         voice = s["by_kind"].get(disclosure.VOICE, 0)
         location = s["by_kind"].get(disclosure.LOCATION, 0)
 
-        parts = [f"{_plural(s['calls'], 'request')} went out today"]
+        parts = [f"{disclosure.plural(s['calls'], 'request')} went out today"]
 
         # Voice first: it is the one people mean.
         if voice:
@@ -84,8 +78,8 @@ class DisclosureSkill(Skill):
         said = ", ".join(parts) + "."
 
         if location:
-            times = "once" if location == 1 else f"{location} times"
-            said += f" Your location went to the weather service {times}."
+            said += (" Your location went to the weather service "
+                     f"{disclosure.times(location)}.")
         if s["withheld"]:
             # The reassuring half, and the only part with no other trace.
             n = s["withheld"]

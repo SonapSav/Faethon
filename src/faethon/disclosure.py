@@ -125,6 +125,25 @@ class Ledger:
         return out
 
 
+def plural(n: int, word: str) -> str:
+    """`n` of `word`, pluralised. Regular plurals only.
+
+    Lives here rather than beside either caller because it had two
+    implementations and only one of them got fixed: the spoken answer said
+    "1 request" while `faethon-sent` still printed "1 times". Both surfaces
+    describe the same ledger, so they share the grammar.
+
+    An irregular plural is written out where it is used -- guessing at English
+    here would be a worse bug than the one it replaced.
+    """
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def times(n: int) -> str:
+    """How many occasions, spoken. "once" reads better than "1 times"."""
+    return "once" if n == 1 else f"{n} times"
+
+
 def summarise(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Fold records into the shape both the spoken answer and the report need."""
     sent = [r for r in rows if r.get("kind") != "withheld"]

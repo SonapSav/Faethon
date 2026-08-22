@@ -205,3 +205,62 @@ def test_plurals_are_spoken_as_plurals(monkeypatch):
     assert "3 times" in said
     assert "5 stretches of silence" in said
     assert "none of them" in said
+
+
+# -- one grammar for both surfaces --------------------------------------------
+# The plural logic had two implementations and only one got fixed: the spoken
+# answer said "1 request" while faethon-sent still printed "1 times". Both
+# describe the same ledger, so they share the helper now.
+
+
+@pytest.mark.parametrize("n,word,want", [
+    (0, "request", "0 requests"),
+    (1, "request", "1 request"),
+    (2, "request", "2 requests"),
+    (1, "check", "1 check"),
+])
+def test_plural(n, word, want):
+    assert disclosure.plural(n, word) == want
+
+
+@pytest.mark.parametrize("n,want", [(1, "once"), (0, "0 times"), (3, "3 times")])
+def test_times_reads_as_english(n, want):
+    assert disclosure.times(n) == want
+
+
+def test_the_report_does_not_say_one_times(monkeypatch, capsys):
+    """The bug this section exists for."""
+    import sys
+    from faethon import sent
+
+    rows = [{"at": 1.0, "host": "openrouter.ai", "path": "/credits",
+             "kind": disclosure.ACCOUNT, "asked": False},
+            {"at": 1.0, "host": "", "path": "no_speech",
+             "kind": "withheld", "asked": True}]
+    monkeypatch.setattr(disclosure.LEDGER, "read", lambda since_seconds=None: rows)
+    monkeypatch.setattr(sys, "argv", ["faethon-sent"])
+    sent.main()
+
+    out = capsys.readouterr().out
+    assert "1 times" not in out
+    assert "Once the microphone was open" in out
+    assert "-- a background check that runs whether" in out
+
+
+def test_the_report_pluralises_when_it_should(monkeypatch, capsys):
+    import sys
+    from faethon import sent
+
+    rows = ([{"at": 1.0, "host": "o", "path": "/credits",
+              "kind": disclosure.ACCOUNT, "asked": False}] * 3
+            + [{"at": 1.0, "host": "", "path": "no_speech",
+                "kind": "withheld", "asked": True}] * 4)
+    monkeypatch.setattr(disclosure.LEDGER, "read", lambda since_seconds=None: rows)
+    monkeypatch.setattr(sys, "argv", ["faethon-sent"])
+    sent.main()
+
+    out = capsys.readouterr().out
+    assert "4 times the microphone was open" in out
+    # The article moves with the number: "a background checks" is the bug.
+    assert "-- background checks that run whether" in out
+    assert "a background checks" not in out

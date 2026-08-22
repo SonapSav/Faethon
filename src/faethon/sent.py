@@ -64,11 +64,17 @@ def main() -> None:
     # The two facts that are actually about consent rather than scale.
     print()
     if s["unasked"]:
-        print(f"{s['unasked']} of those went out with nobody asking -- background "
-              f"checks that run whether or not anyone is home.")
+        n = s["unasked"]
+        # The article has to move with the number, or the plural reads
+        # "a background checks that run".
+        checks = ("a background check that runs" if n == 1
+                  else "background checks that run")
+        print(f"{n} of those went out with nobody asking -- {checks} "
+              f"whether or not anyone is home.")
     if s["withheld"]:
-        print(f"{s['withheld']} times the microphone was open and nothing was sent: "
-              f"no speech was heard, so no audio left.")
+        n = s["withheld"]
+        print(f"{disclosure.times(n).capitalize()} the microphone was open and "
+              f"nothing was sent: no speech was heard, so no audio left.")
 
 
 if __name__ == "__main__":  # pragma: no cover
