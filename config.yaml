@@ -161,6 +161,17 @@ radio:
   volume_step: 10          # percentage points per "turn the radio up"
   cache_seconds: 300.0     # the station list changes rarely
 
+  # Turn the radio down while Faethon is talking or being talked to, and put
+  # it back afterwards. This is NOT about the microphone: measured, the radio
+  # arrives at the mic around -88 dBFS against speech at -20 to -30, and
+  # scored 0.0026 against a wake threshold of 0.7. It is so a person can hear
+  # the reply over the music.
+  #
+  # Restores to whatever it was, unless you changed the volume yourself during
+  # the conversation -- then your setting wins and nothing is put back.
+  duck: true
+  duck_to: 15              # 0 would be a silence people reach over to fix
+
 air:
   # Air quality and UV, at the same coordinates as the weather above.
   #

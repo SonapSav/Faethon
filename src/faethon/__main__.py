@@ -19,6 +19,7 @@ itself and answers its own sentence.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import signal
 import sys
@@ -451,6 +452,34 @@ class Faethon:
                 )
                 return
 
+    def _restore_radio(self) -> None:
+        """Undo a duck left behind by a process that died mid-conversation.
+
+        Without this the radio sits at 15 until somebody notices and reaches
+        for their phone, and the cause -- an assistant that crashed an hour
+        ago -- is not something anyone would connect to a quiet radio.
+        """
+        radio = self.registry.get("control_radio")
+        if radio is not None and hasattr(radio, "restore_after_crash"):
+            try:
+                radio.restore_after_crash()
+            except Exception as e:                  # never block startup
+                log.debug("could not restore the radio at startup: %s", e)
+
+    @contextlib.contextmanager
+    def _ducked(self):
+        """Turn the radio down while Faethon holds the floor.
+
+        A no-op when the radio skill is absent, so removing the skill does not
+        leave a dangling call site.
+        """
+        radio = self.registry.get("control_radio")
+        if radio is None or not hasattr(radio, "ducked"):
+            yield
+            return
+        with radio.ducked():
+            yield
+
     def _announce_status(self, status: str) -> None:
         """Play a status clip from outside a turn.
 
@@ -458,8 +487,11 @@ class Faethon:
         played during a turn, where the user is standing there waiting and the
         clip is an answer rather than an announcement.
         """
-        if self.quiet.allows() and self.announcer.say(status):
-            self.quiet.spoke()
+        if self.quiet.allows():
+            with self._ducked():
+                said = self.announcer.say(status)
+            if said:
+                self.quiet.spoke()
 
     def _announce(self, text: str) -> None:
         """Say something nobody asked for: chime first, then the words.
@@ -469,8 +501,9 @@ class Faethon:
         lost.
         """
         log.info("announcing: %s", text)
-        playback.play_wav(TIMER_SOUND, self.config.audio.output_device)
-        self._speak(text)
+        with self._ducked():
+            playback.play_wav(TIMER_SOUND, self.config.audio.output_device)
+            self._speak(text)
         self.quiet.spoke()
 
     def _greet(self) -> None:
@@ -496,6 +529,7 @@ class Faethon:
         playback.play_wav(GREETING_SOUND, self.config.audio.output_device)
 
     def run(self) -> None:
+        self._restore_radio()
         self._greet()
         log.info("Faethon is listening -- say the wake word")
         while self._running:
@@ -544,7 +578,12 @@ class Faethon:
                     log.error("microphone has been silent for minutes")
                     self._announce_status(NO_MIC)
                 if self.detector.process(frame) is not None:
-                    self._converse(read_frame)
+                    # Ducked from the wake word rather than from the reply:
+                    # you are talking over the music too, and a radio that
+                    # dipped only while Faethon spoke would lurch up and down
+                    # through a conversation.
+                    with self._ducked():
+                        self._converse(read_frame)
                     # Flush the wake model: the tail of Faethon's own reply may
                     # still be in its feature buffer.
                     self.detector.reset()

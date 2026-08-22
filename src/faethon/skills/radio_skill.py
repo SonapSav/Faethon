@@ -42,13 +42,15 @@ answers it.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
+import threading
 import time
 
 import httpx
 
-from .. import disclosure
+from .. import disclosure, state
 from ..config import load_config
 from .base import Skill
 
@@ -64,6 +66,9 @@ UNAVAILABLE_FOR = 60.0
 #: wants read back; a list twice that long stops being an answer and becomes a
 #: recital you cannot interrupt without the wake word.
 MAX_SPOKEN = 20
+#: Remembers a duck across a crash. Without it, a process that dies mid-turn
+#: leaves the radio at 15 until somebody notices and reaches for their phone.
+DUCK_STATE = "radio_duck"
 
 
 def parse_frequency(text: str) -> float | None:
@@ -176,6 +181,8 @@ class RadioSkill(Skill):
         self._config = None
         self._stations: tuple[float, list[dict]] | None = None
         self._down_until = 0.0
+        self._duck_thread: threading.Thread | None = None
+        self._duck_lock = threading.Lock()
 
     @property
     def config(self):
@@ -389,6 +396,100 @@ class RadioSkill(Skill):
         if wanted == 0:
             return "Radio volume is at zero, muted."
         return f"Radio volume is {wanted} percent."
+
+    # -- getting out of the way -------------------------------------------
+
+    @contextlib.contextmanager
+    def ducked(self):
+        """Turn the radio down for the duration, then put it back.
+
+        Wraps the whole conversation rather than just the reply: you are
+        talking over the music too, and a radio that dips only while Faethon
+        speaks would lurch up and down through a conversation.
+
+        Nothing in here may raise. Ducking is a courtesy, and a courtesy that
+        can break a turn is worse than no courtesy -- so a dead RadioHost, a
+        timeout or a surprising response body all just mean the radio stays
+        where it is.
+        """
+        self._duck()
+        try:
+            yield
+        finally:
+            self._unduck()
+
+    def _duck(self) -> None:
+        """Start turning the radio down. Returns immediately.
+
+        In a thread because it must never delay the ack chime. Measured the
+        blocking version at a median of 0ms and a worst case of **4094ms** --
+        one call hit the timeout, and that is four seconds of silence before
+        the "go ahead" sound, on the one path where somebody is standing there
+        waiting to speak.
+        """
+        if not self.config.duck or not self.available:
+            return
+        with self._duck_lock:
+            if self._duck_thread and self._duck_thread.is_alive():
+                return
+            self._duck_thread = threading.Thread(target=self._duck_now, daemon=True)
+            self._duck_thread.start()
+
+    def _duck_now(self) -> None:
+        try:
+            now = self.status()
+            if not now or not now.get("playing"):
+                return                            # nothing to get out of the way of
+            was = int(now.get("volume", 0))
+            if was <= self.config.duck_to:
+                return                            # already quieter than we would set it
+            # Written BEFORE the request, not after. A POST that times out may
+            # still have arrived -- that is exactly how the radio ended up
+            # stuck at 15 with nothing recorded to restore it from. Saving
+            # first makes the restore self-correcting: if the change never
+            # landed, the volume will not match and the restore stands down.
+            state.save(DUCK_STATE, {"was": was, "set": self.config.duck_to})
+            self._call("POST", "/api/player/volume", json={"level": self.config.duck_to})
+            log.debug("radio ducked %d -> %d", was, self.config.duck_to)
+        except Exception as e:
+            # Deliberately broad, and in a thread, where an escaping exception
+            # is logged by the interpreter and lost rather than handled.
+            # Ducking is a courtesy; a courtesy that can raise anywhere near a
+            # turn is worse than no courtesy.
+            log.debug("could not duck the radio: %s", e)
+
+    def _unduck(self) -> None:
+        try:
+            # The duck may still be in flight on a slow link. Wait briefly
+            # rather than racing it; the saved state makes a miss harmless.
+            thread = self._duck_thread
+            if thread and thread.is_alive():
+                thread.join(timeout=2.0)
+            saved = state.load(DUCK_STATE, None)
+            if not isinstance(saved, dict):
+                return
+            now = self.status()
+            if now is None:
+                return                            # try again at the next restore
+            current = int(now.get("volume", -1))
+            if current != saved.get("set"):
+                # Either somebody moved it while we were talking -- almost
+                # certainly the user, through this very skill, and their
+                # instruction is the more recent one -- or the duck never
+                # actually landed. Both mean: leave it alone.
+                log.debug("radio at %d, not the %d we set; leaving it",
+                          current, saved.get("set"))
+            else:
+                self._call("POST", "/api/player/volume", json={"level": saved["was"]})
+            state.save(DUCK_STATE, None)
+        except Exception as e:
+            log.debug("could not restore the radio: %s", e)
+
+    def restore_after_crash(self) -> None:
+        """Called at startup. A process that died mid-turn left the radio low."""
+        if isinstance(state.load(DUCK_STATE, None), dict):
+            log.info("radio was left ducked by a previous run; restoring")
+            self._unduck()
 
     def _list_stations(self) -> str:
         """What is on the dial, fetched fresh every time.

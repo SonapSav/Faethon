@@ -149,6 +149,13 @@ class RadioConfig(BaseModel):
     #: The station list changes when someone edits it on the other Pi, which
     #: is rare. Long enough to stay off the network during a conversation.
     cache_seconds: float = Field(300.0, ge=0.0)
+    #: Turn the radio down while Faethon is in a conversation or announcing.
+    #: Not about the microphone -- measured, the radio reaches it at about
+    #: -88 dBFS and never troubles the wake model. This is so a person can
+    #: hear the reply over the music.
+    duck: bool = True
+    #: What to drop it to. 0 would be a silence people reach to fix.
+    duck_to: int = Field(15, ge=0, le=100)
 
 
 class TurnLogConfig(BaseModel):

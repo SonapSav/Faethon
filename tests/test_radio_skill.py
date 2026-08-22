@@ -45,12 +45,20 @@ def rig():
                 return list(STATIONS)
             if path == "/api/player/status":
                 return dict(self.status_body)
+            if path == "/api/player/volume":
+                # A faithful fake: the real server changes what status reports,
+                # and the restore logic reads it back to decide whether the
+                # duck actually landed. A stub that ignored this made the
+                # restore look broken when it was behaving correctly.
+                Rig.status_body = dict(self.status_body, volume=kw["json"]["level"])
             return {}
 
     Rig.calls = []
+    Rig.status_body = dict(PLAYING)
     r = Rig()
     r._config = type("C", (), {"base_url": "http://x", "timeout_seconds": 4.0,
-                               "volume_step": 10, "cache_seconds": 300.0})()
+                               "volume_step": 10, "cache_seconds": 300.0,
+                               "duck": True, "duck_to": 15})()
     return r
 
 
@@ -138,7 +146,9 @@ def test_volume_is_clamped(rig):
 
 
 def test_volume_nudges_from_the_current_level(rig):
+    """Cumulative, not relative to a fixed starting point."""
     assert rig.run(vol="up") == "Radio volume is 49 percent."
+    assert rig.run(vol="down") == "Radio volume is 39 percent."
     assert rig.run(vol="down") == "Radio volume is 29 percent."
 
 
@@ -300,3 +310,126 @@ def test_listing_phrases_reach_the_list_not_now_playing(phrase):
 def test_now_playing_is_still_a_different_question(phrase):
     params = SKILL.match(phrase)
     assert params is not None and "list" not in params
+
+
+# -- ducking ------------------------------------------------------------------
+# Turning the radio down while Faethon holds the floor. Not for the microphone
+# -- measured, the radio reaches it at about -88 dBFS -- but so a person can
+# hear the reply over the music.
+
+
+def _settle(rig):
+    t = rig._duck_thread
+    if t:
+        t.join(timeout=5)
+
+
+def test_ducking_lowers_and_restores(rig):
+    with rig.ducked():
+        _settle(rig)
+        assert ("POST", "/api/player/volume", {"level": 15}) in type(rig).calls
+    assert ("POST", "/api/player/volume", {"level": 39}) in type(rig).calls
+
+
+def test_the_duck_never_blocks_the_turn(rig):
+    """Measured blocking at a worst case of 4094ms -- four seconds of silence
+    before the "go ahead" chime, with someone standing there waiting."""
+    import time
+
+    t0 = time.monotonic()
+    rig._duck()
+    blocked = time.monotonic() - t0
+    _settle(rig)
+    assert blocked < 0.05, f"duck blocked the turn for {blocked*1000:.0f}ms"
+
+
+def test_the_duck_is_recorded_before_the_request(rig, tmp_path):
+    """A POST that times out may still have arrived.
+
+    That is exactly how the radio ended up stuck at 15 with nothing recorded
+    to restore it from: the write happened after the call, so a timeout lost
+    the only means of undoing it.
+    """
+    from faethon import state
+
+    seen = {}
+
+    def failing(method, path, **kw):
+        if path == "/api/player/status":
+            return dict(PLAYING)
+        seen["state_at_post_time"] = state.load("radio_duck", None)
+        return None                       # as if it timed out
+
+    rig._call = failing
+    rig._duck()
+    _settle(rig)
+    assert seen["state_at_post_time"] == {"was": 39, "set": 15}
+
+
+def test_a_duck_that_never_landed_is_not_restored(rig):
+    """If the volume is not what we set, the change did not happen -- putting
+    the radio somewhere it never was would be worse than doing nothing."""
+    from faethon import state
+
+    state.save("radio_duck", {"was": 39, "set": 15})
+    rig.status_body = dict(PLAYING, volume=39)      # never actually ducked
+    before = len([c for c in type(rig).calls if c[1] == "/api/player/volume"])
+    rig._unduck()
+    after = len([c for c in type(rig).calls if c[1] == "/api/player/volume"])
+    assert after == before, "restored a duck that never happened"
+    assert state.load("radio_duck", None) is None
+
+
+def test_a_volume_you_set_mid_conversation_wins(rig):
+    """Your instruction is the more recent one."""
+    from faethon import state
+
+    state.save("radio_duck", {"was": 39, "set": 15})
+    rig.status_body = dict(PLAYING, volume=55)      # user said "radio volume 55"
+    rig._unduck()
+    assert ("POST", "/api/player/volume", {"level": 39}) not in type(rig).calls
+
+
+def test_nothing_is_ducked_when_the_radio_is_off(rig):
+    rig.status_body = {"playing": False}
+    rig._duck()
+    _settle(rig)
+    assert not [c for c in type(rig).calls if c[1] == "/api/player/volume"]
+
+
+def test_a_radio_already_quieter_is_left_alone(rig):
+    rig.status_body = dict(PLAYING, volume=10)
+    rig._duck()
+    _settle(rig)
+    assert not [c for c in type(rig).calls if c[1] == "/api/player/volume"]
+
+
+def test_ducking_can_be_switched_off(rig):
+    rig._config.duck = False
+    rig._duck()
+    _settle(rig)
+    assert not [c for c in type(rig).calls if c[1] == "/api/player/volume"]
+
+
+def test_a_crash_mid_turn_is_repaired_at_startup(rig):
+    """Otherwise the radio sits at 15 until somebody reaches for their phone,
+    and nobody would connect a quiet radio to an assistant that died an hour
+    ago."""
+    from faethon import state
+
+    state.save("radio_duck", {"was": 39, "set": 15})
+    rig.status_body = dict(PLAYING, volume=15)
+    rig.restore_after_crash()
+    assert ("POST", "/api/player/volume", {"level": 39}) in type(rig).calls
+    assert state.load("radio_duck", None) is None
+
+
+def test_ducking_never_raises(rig):
+    """A courtesy that can break a turn is worse than no courtesy."""
+    def explode(*a, **kw):
+        raise RuntimeError("radiohost fell over")
+
+    rig._call = explode
+    with rig.ducked():
+        _settle(rig)
+    # reaching here without an exception is the assertion
