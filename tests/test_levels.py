@@ -58,3 +58,21 @@ def test_rounding_is_half_up_not_bankers():
 def test_a_level_survives_a_round_trip():
     for level in range(levels.MIN_LEVEL, levels.MAX_LEVEL + 1):
         assert levels.from_percent(levels.to_percent(level)) == level
+
+
+@pytest.mark.parametrize("text,want", [
+    ("7", 7), ("six", 6), ("ten", 10), ("zero", 0), ("50", 50), (7, 7),
+    ("fifty", None), ("", None), ("banana", None),
+])
+def test_to_number_takes_digits_or_words(text, want):
+    """Whisper writes small numbers either way and is not consistent about
+    which: the same person produced "at six" and "at 7" a minute apart."""
+    assert levels.to_number(text) == want
+
+
+def test_the_spoken_alternation_covers_every_level():
+    import re
+
+    for word, value in levels.WORDS.items():
+        assert re.fullmatch(levels.SPOKEN, word), f"{word} missing from SPOKEN"
+        assert levels.to_number(word) == value

@@ -522,3 +522,34 @@ def test_a_deferred_volume_survives_several_changes_in_one_turn(rig):
         rig.run(vol="down")
         assert rig.status_body["volume"] == 15
     assert rig.status_body["volume"] == 70
+
+
+# -- the phrasings that actually came out of Whisper --------------------------
+# Taken from the journal, where they matched nothing and fell through to the
+# model in silence. The failure mode is the quiet kind: the command works most
+# of the time, so the times it does not look like the radio ignoring you.
+
+
+@pytest.mark.parametrize("heard", [
+    "radio volume  at six.",        # verbatim from the journal, double space
+    "Radio volume at 7.",           # same person, a minute later, digits
+    "Radio Vol. 7",                 # "volume" abbreviated
+    "radio volume 7",
+    "radio volume to 7",
+    "radio volume at 7",
+    "radio volume six",
+    "set the radio volume at 5",
+    "set the radio volume to five",
+])
+def test_the_ways_people_actually_say_it(heard):
+    assert SKILL.match(heard.lower()) is not None, heard
+
+
+def test_a_number_word_becomes_a_level(rig):
+    assert rig.run(level="six") == "Radio volume is set to 60%."
+    assert rig.run(level="ten") == "Radio volume is set to 100%."
+    assert rig.run(level="zero") == "Radio volume is set to 0%, muted."
+
+
+def test_a_word_that_is_not_a_number_is_admitted(rig):
+    assert "didn't catch" in rig.run(level="banana")

@@ -23,6 +23,33 @@ MIN_LEVEL, MAX_LEVEL = 0, 10
 PERCENT_PER_LEVEL = 10
 
 
+#: Whisper writes small numbers either way, and which one you get is not
+#: stable: the same person asking twice produced "radio volume at six" and
+#: "Radio volume at 7." within a minute of each other. A pattern that only
+#: accepts digits works most of the time, which is the worst amount.
+WORDS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+}
+
+#: For dropping into a pattern's capture group. Longest first so "seven" is
+#: not matched as "se" by some future shorter alternative.
+SPOKEN = r"\d{1,3}|" + "|".join(sorted(WORDS, key=len, reverse=True))
+
+
+def to_number(text: object) -> int | None:
+    """A spoken quantity as an integer, whether it arrived as digits or words."""
+    if isinstance(text, int):
+        return text
+    word = str(text).strip().lower()
+    if word in WORDS:
+        return WORDS[word]
+    try:
+        return int(word)
+    except ValueError:
+        return None
+
+
 def _half_up(value: float) -> int:
     """Round .5 away from zero, which is what a person means by "rounded".
 

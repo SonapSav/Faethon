@@ -127,8 +127,9 @@ class VolumeSkill(Skill):
         # The unit group is what stops "set the volume to 30%" becoming
         # level 30. Whisper transcribes the sign literally, and Faethon
         # announces percentages, so people say them back.
-        r"\bset (?:the )?volume (?:to|at) (?P<level>\d+)\s*(?P<unit>%|percent)?",
-        r"\bvolume (?:to |at )?(?P<level>\d+)\s*(?P<unit>%|percent)?",
+        rf"\bset (?:the )?volume (?:to|at) (?P<level>{levels.SPOKEN})"
+        rf"\s*(?P<unit>%|percent)?",
+        rf"\bvolume (?:to |at )?(?P<level>{levels.SPOKEN})\s*(?P<unit>%|percent)?",
         r"\b(?P<action>louder)\b",
         r"\b(?P<action>quieter|softer)\b",
         r"\b(?P<action>unmute)\b",
@@ -261,7 +262,10 @@ class VolumeSkill(Skill):
 
             if raw_level is not None:
                 try:
-                    target = _as_level(int(raw_level), str(params.get("unit") or ""))
+                    number = levels.to_number(raw_level)
+                    if number is None:
+                        raise ValueError(raw_level)
+                    target = _as_level(number, str(params.get("unit") or ""))
                 except (TypeError, ValueError):
                     return "I didn't catch what level you wanted."
             elif action in ("up", "louder"):

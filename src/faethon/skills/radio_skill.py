@@ -137,9 +137,10 @@ class RadioSkill(Skill):
         # clamped to maximum. This skill announces percentages, so people say
         # percentages back -- the trap volume_skill hit, which is why both now
         # share faethon.levels rather than each having their own scale.
-        r"\bradio\s+volume\s+(?:to\s+)?(?P<level>\d{1,3})\s*(?P<unit>%|percent)?",
-        r"\bset\s+(?:the\s+)?radio\s+volume\s+(?:to\s+)?(?P<level>\d{1,3})"
-        r"\s*(?P<unit>%|percent)?",
+        rf"\bradio\s+vol(?:ume|\.)?\s+(?:to|at)?\s*(?P<level>{levels.SPOKEN})"
+        rf"\s*(?P<unit>%|percent)?",
+        rf"\bset\s+(?:the\s+)?radio\s+vol(?:ume|\.)?\s+(?:to|at)?\s*"
+        rf"(?P<level>{levels.SPOKEN})\s*(?P<unit>%|percent)?",
         rf"\bwhat(?:'s|s| is)\s+(?:playing|on the radio){_END}",
         rf"\bwhat\s+station\s+is\s+(?:this|it|on){_END}",
         # Listing is a different question from "what's playing", and the two
@@ -425,11 +426,10 @@ class RadioSkill(Skill):
         return self._apply(level + (1 if direction == "up" else -1))
 
     def _set_volume(self, number: object, unit: str = "") -> str:
-        try:
-            level = levels.as_level(int(number), unit)   # type: ignore[arg-type]
-        except (TypeError, ValueError):
+        value = levels.to_number(number)
+        if value is None:
             return "I didn't catch what volume you wanted."
-        return self._apply(level)
+        return self._apply(levels.as_level(value, unit))
 
     def _apply(self, level: int) -> str:
         level = max(levels.MIN_LEVEL, min(levels.MAX_LEVEL, level))
