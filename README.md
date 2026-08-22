@@ -257,6 +257,11 @@ scale is 0 to 10, where 0 is muted and 10 is the mixer's maximum. Also
 understands "louder", "quieter", "turn it up", "mute", "set the volume to 8",
 and "what's the volume".
 
+The scale lives in `faethon/levels.py` rather than in this skill, because [the
+radio](#the-radio) on the other Pi uses the same one — somebody who has learned
+that "volume 5" means half will say "radio volume 5" and mean it. Change it in
+one place and both move.
+
 Percentages work as input too, and have to: Faethon announces "70%", so that's
 what people say back. "Set the volume to 30%" and "volume 3" mean the same
 thing, as do "to 7" and "to 70" — a number is read as a percentage when it
@@ -303,6 +308,127 @@ reason the rest of Faethon addresses ALSA by name: card indices move when USB
 devices are re-plugged. If no playback control is found the skill reports
 itself unavailable, so it's hidden from the LLM and explains itself out loud
 rather than failing silently.
+
+## The radio
+
+RadioHost runs on a second Pi at `radiohost.local:8000` — a plain HTTP/JSON API
+on the LAN with no auth, the same trust model as the phone app that normally
+drives it.
+
+```
+"Hey Rhasspy, play 94.9"        Playing 94.9.
+"Βάλε το εκατόν δύο κόμμα δύο"  Playing 102.2.
+"what's playing"                96.3 is playing Europe - The Final Countdown.
+"next station"                  Playing 89.8.
+"turn the radio up"             Radio volume is set to 50%.
+"radio volume 5"                Radio volume is set to 50%.
+"stop the radio"                Radio off.
+"what stations do you have"     I have 19 stations: 88, 89.2, 89.8, 92, ...
+```
+
+The integration is four endpoints and a 94ms round trip. All the design sits in
+one question: how does a spoken request become a station id.
+
+**By frequency, because names do not survive.** With `stt.language` pinned to
+`"en"`, Whisper renders the Greek station names as an unpredictable mix of
+transliteration and translation:
+
+| station | heard | |
+|---|---|---|
+| Ρυθμός | "rithmos" | transliterated |
+| Μέντα | "Menta" | fine |
+| Λάμψη | "lampsy" | mangled |
+| **Δρόμος** | **"the road"** | **translated** |
+| **Μελωδία** | **"melody"** | **translated** |
+
+No string comparison recovers "the road" into Δρόμος, and no single rule covers
+a set that is sometimes one and sometimes the other. Frequencies have none of
+that problem — all nineteen stations carry one, they are unique, and digits are
+language-neutral. "Play ninety four point nine" arrives as `94.9`; "Βάλε το
+ενενήντα τέσσερα κόμμα εννιά" arrives as `94,9`. Both parse, and it is how
+people refer to radio anyway.
+
+An FM-band check is the only thing separating a frequency from every other
+number in a sentence, so `2026` and "play 8" are refused. A bare "94 9" parses
+as 94 rather than guessing at a decimal that would select a different station.
+
+Names still reach the model as a fallback, which covers the Latin-script twelve
+and can resolve "the road" back to Δρόμος with priors no matcher has. Same
+split as the weather skill: the regex path never captures a name.
+
+**Volume is the same 0–10 scale as the speaker**, shared through
+`faethon/levels.py` rather than written twice, so "radio volume 5" means half
+in both places. It inherits the trap too — announcing "50%" teaches people to
+say "50" back, which read as a level would clamp to maximum.
+
+Nudging works in levels, so "turn the radio up" from 45 lands on 60 rather than
+55: after one nudge the radio sits on the scale Faethon speaks in instead of
+between two of its steps.
+
+### Ducking
+
+The radio drops to 15% while Faethon holds the floor, and goes back afterwards.
+From the **wake word**, not from the reply — you are talking over the music
+too, and a radio that dipped only while Faethon spoke would lurch up and down
+through a conversation. Unprompted announcements duck as well, since a dust
+warning is the one nobody is braced for.
+
+**Not for the microphone.** That was the obvious worry — a radio in the same
+room feeding the mic continuously and re-opening the follow-up window on every
+turn, which is what the conversation cap exists to survive. Measured instead of
+assumed: 45s of room audio scored a maximum of **0.0026** against a wake
+threshold of 0.7, with the radio arriving at about **−88 dBFS** where speech
+arrives at −20 to −30. The null result was checked by sweeping the radio's
+volume (39/60/80 → −87.9/−78.1/−69.0 dBFS) to prove the measurement could see
+it at all, so it means "far too quiet to matter" rather than "nothing was
+playing". Move the speaker and that wants re-measuring; the same 45s recording
+answers it.
+
+Ducking exists for the **person in the room**, who has to hear the reply over
+the music. A different question, which the acoustic measurement never asked.
+
+Three things it has to get right:
+
+- **A volume you set mid-conversation wins.** "Radio volume 5" during a turn is
+  a more recent instruction than whatever it was before, so nothing is put back.
+- **A duck that never landed is not "restored".** The state is written *before*
+  the request, because a POST that times out may still have arrived — that is
+  exactly how the radio ended up stuck at 15 with nothing recorded to undo it.
+  Writing first makes the restore self-correcting: if the volume is not what we
+  think we set, the change never happened and the restore stands down.
+- **It never blocks a turn.** The duck runs in a thread. Measured blocking at a
+  worst case of **4094ms** before that — four seconds of silence ahead of the
+  "go ahead" chime, with somebody standing there waiting to speak. It is 0.7ms
+  now.
+
+A crash mid-turn is repaired at startup, or the radio would sit at 15 until
+somebody reached for their phone — and nobody would connect a quiet radio to an
+assistant that died an hour ago. Everything in the path swallows exceptions,
+deliberately broadly: ducking is a courtesy, and a courtesy that can break a
+turn is worse than no courtesy. Switch it off with `radio.duck`.
+
+### The rest
+
+`"what stations do you have"` is fetched **fresh every time**, never cached —
+the list changes when stations are added on the other Pi, and finding out
+whether it did is the whole reason for asking. It reads frequencies rather than
+names, for the same two reasons selection does. It takes 29.6s to say all
+nineteen, so the count comes first and barge-in cuts off the rest; past twenty
+it summarises instead of reciting.
+
+Every pattern needs an explicit radio marker, because this skill sorts *before*
+`set_volume` and `set_timer` in the registry and a loose one would silently
+take "turn it up" and "stop" from the skills that own them. Twelve phrases are
+pinned in both directions.
+
+An unreachable Pi is remembered for a minute rather than retried per turn, since
+the timeout would land inside a conversation. And an unfetchable station list
+reports as unreachable rather than "I don't have a station on 94.9" — absence
+of the list is not absence of the station, and the wrong answer sends you
+looking for something that is really there.
+
+Radio calls appear in the disclosure ledger under a `lan` kind. They left this
+machine, which is why they are counted, but they did not leave the house.
 
 ## Clearing the conversation
 
@@ -973,6 +1099,7 @@ itself out loud rather than failing silently.
 | `src/faethon/speech.py` | sentence chunking and pipelined playback |
 | `src/faethon/skills/` | skill contract, registry, and the skills themselves |
 | `src/faethon/router.py` | regex-first, LLM-fallback routing |
+| `src/faethon/levels.py` | the 0-10 volume scale, shared by speaker and radio |
 | `src/faethon/turnlog.py` | one metadata line per turn |
 | `src/faethon/disclosure.py` | one line per outbound request |
 | `config.yaml` | everything machine-specific |
