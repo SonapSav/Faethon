@@ -130,6 +130,27 @@ class AirConfig(BaseModel):
     stale_after_hours: float = Field(6.0, gt=0.0)
 
 
+class RadioConfig(BaseModel):
+    """RadioHost, the internet-radio server on the other Pi.
+
+    A plain HTTP/JSON API on the LAN, no auth -- the same trust model as the
+    phone app that normally drives it.
+    """
+
+    #: mDNS rather than the IP: the installer on that Pi sets up avahi, and a
+    #: DHCP lease can move. Falls back to nothing useful if mDNS breaks, which
+    #: `available` reports rather than hiding.
+    base_url: str = "http://radiohost.local:8000"
+    #: LAN round trips measured at 94ms. Short, because this runs inside a
+    #: spoken turn and a dead host must not hold the conversation open.
+    timeout_seconds: float = Field(4.0, gt=0.0)
+    #: Percentage points per "turn the radio up".
+    volume_step: int = Field(10, ge=1, le=50)
+    #: The station list changes when someone edits it on the other Pi, which
+    #: is rare. Long enough to stay off the network during a conversation.
+    cache_seconds: float = Field(300.0, ge=0.0)
+
+
 class TurnLogConfig(BaseModel):
     """A line per turn, so future thresholds can be measured.
 
@@ -263,6 +284,7 @@ class Config(BaseModel):
     turn_log: TurnLogConfig = TurnLogConfig()
     weather: WeatherConfig = WeatherConfig()
     air: AirConfig = AirConfig()
+    radio: RadioConfig = RadioConfig()
     models: ModelsConfig
     stt: STTConfig = STTConfig()
     llm: LLMConfig

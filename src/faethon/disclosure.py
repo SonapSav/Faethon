@@ -44,6 +44,7 @@ VOICE = "voice"        # audio recorded in this room
 TEXT = "text"          # words you said, or words it is about to say
 LOCATION = "location"  # where this house is
 ACCOUNT = "account"    # billing metadata, nothing about you or the room
+LAN = "lan"            # another machine in this house; left the Pi, not the building
 
 #: Endpoint -> what it discloses. Anything unlisted is assumed to carry text,
 #: which is the cautious reading: better to overstate a disclosure than to

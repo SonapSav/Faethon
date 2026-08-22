@@ -24,6 +24,7 @@ KIND_MEANS = {
     disclosure.TEXT: "words you said, or words it said back",
     disclosure.LOCATION: "where this house is",
     disclosure.ACCOUNT: "billing metadata only",
+    disclosure.LAN: "another machine in this house",
 }
 
 
