@@ -389,6 +389,22 @@ class RadioSkill(Skill):
             i = 0
         return self._play(rows[i % len(rows)])
 
+    def _pending_duck(self) -> dict | None:
+        """The duck in force, if there is one.
+
+        Anything that changes the volume during a conversation has to go
+        through this. The live reading is the *ducked* volume, not the
+        listener's, and acting on it twice produced two bugs: "turn the radio
+        up" from a real 60 read the ducked 15 and went to 30, losing the
+        setting entirely; and setting a volume outright cancelled the duck, so
+        the confirmation played over a radio back at full volume.
+        """
+        thread = self._duck_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1.0)        # it writes the state before the POST
+        saved = state.load(DUCK_STATE, None)
+        return saved if isinstance(saved, dict) else None
+
     def _nudge(self, direction: str) -> str:
         """One level up or down, landing on a level boundary either way.
 
@@ -397,10 +413,15 @@ class RadioSkill(Skill):
         rather than 55, so after one nudge it sits on the scale Faethon speaks
         in rather than between two of its steps.
         """
-        now = self.status()
-        if now is None:
-            return self.unavailable_reason
-        level = levels.from_percent(int(now.get("volume", 0)))
+        pending = self._pending_duck()
+        if pending is not None:
+            # Step from where the listener had it, not from where we put it.
+            level = levels.from_percent(int(pending.get("was", 0)))
+        else:
+            now = self.status()
+            if now is None:
+                return self.unavailable_reason
+            level = levels.from_percent(int(now.get("volume", 0)))
         return self._apply(level + (1 if direction == "up" else -1))
 
     def _set_volume(self, number: object, unit: str = "") -> str:
@@ -412,8 +433,16 @@ class RadioSkill(Skill):
 
     def _apply(self, level: int) -> str:
         level = max(levels.MIN_LEVEL, min(levels.MAX_LEVEL, level))
-        if self._call("POST", "/api/player/volume",
-                      json={"level": levels.to_percent(level)}) is None:
+        pending = self._pending_duck()
+        if pending is not None:
+            # Ducked: change what we will come back up to, and stay down. The
+            # radio would otherwise jump to the new level immediately and the
+            # confirmation would play over it -- which is the thing ducking
+            # exists to prevent, defeated by the one command that is about
+            # volume. The new level lands when the conversation closes.
+            state.save(DUCK_STATE, {**pending, "was": levels.to_percent(level)})
+        elif self._call("POST", "/api/player/volume",
+                        json={"level": levels.to_percent(level)}) is None:
             return self.unavailable_reason
         if level <= levels.MIN_LEVEL:
             # 0% alone leaves it unclear whether the radio is off or merely

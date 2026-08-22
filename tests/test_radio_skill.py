@@ -50,7 +50,12 @@ def rig():
                 # and the restore logic reads it back to decide whether the
                 # duck actually landed. A stub that ignored this made the
                 # restore look broken when it was behaving correctly.
-                Rig.status_body = dict(self.status_body, volume=kw["json"]["level"])
+                # self, not Rig: a test that assigns rig.status_body creates
+                # an instance attribute, and writing the class one here would
+                # be shadowed by it -- the update lands somewhere nothing
+                # reads. Cost an hour twice; the stub misleads more quietly
+                # than the code it stands in for.
+                self.status_body = dict(self.status_body, volume=kw["json"]["level"])
             return {}
 
     Rig.calls = []
@@ -463,3 +468,57 @@ def test_ducking_never_raises(rig):
     with rig.ducked():
         _settle(rig)
     # reaching here without an exception is the assertion
+
+
+# -- changing the volume during a conversation --------------------------------
+# Both of these were bugs, and they share a cause: the live reading during a
+# turn is the *ducked* volume, not the listener's. Anything that acts on it
+# gets the wrong number and cancels the duck by writing over it.
+
+
+def test_setting_a_volume_while_ducked_does_not_cancel_the_duck(rig):
+    """Otherwise the confirmation plays over a radio back at full volume --
+    the one thing ducking exists to prevent, defeated by the one command that
+    is actually about volume."""
+    with rig.ducked():
+        _settle(rig)
+        assert rig.run(level=5) == "Radio volume is set to 50%."
+        assert rig.status_body["volume"] == 15, "jumped to the new level mid-reply"
+    assert rig.status_body["volume"] == 50, "did not land on the new level"
+
+
+def test_nudging_while_ducked_steps_from_the_listeners_level(rig):
+    """From a real 60, "up" is 70. Reading the ducked 15 instead made it 30
+    and lost the setting entirely -- the worse of the two, because nothing
+    about it looks wrong until you notice the radio is quiet."""
+    rig.status_body = dict(PLAYING, volume=60)
+    with rig.ducked():
+        _settle(rig)
+        assert rig.run(vol="up") == "Radio volume is set to 70%."
+        assert rig.status_body["volume"] == 15
+    assert rig.status_body["volume"] == 70
+
+
+def test_nudging_down_while_ducked(rig):
+    rig.status_body = dict(PLAYING, volume=60)
+    with rig.ducked():
+        _settle(rig)
+        assert rig.run(vol="down") == "Radio volume is set to 50%."
+    assert rig.status_body["volume"] == 50
+
+
+def test_outside_a_conversation_the_volume_changes_immediately(rig):
+    """No duck in force, so nothing is deferred."""
+    assert rig.run(level=4) == "Radio volume is set to 40%."
+    assert rig.status_body["volume"] == 40
+
+
+def test_a_deferred_volume_survives_several_changes_in_one_turn(rig):
+    """The last one said is the one that lands."""
+    with rig.ducked():
+        _settle(rig)
+        rig.run(level=5)
+        rig.run(level=8)
+        rig.run(vol="down")
+        assert rig.status_body["volume"] == 15
+    assert rig.status_body["volume"] == 70
